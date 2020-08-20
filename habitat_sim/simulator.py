@@ -24,6 +24,8 @@ from habitat_sim.sensors.noise_models import make_sensor_noise_model
 from habitat_sim.sim import SimulatorBackend, SimulatorConfiguration
 from habitat_sim.utils.common import quat_from_angle_axis
 
+from habitat_sim.utils import sim_profiling_utils
+
 torch = None
 
 
@@ -133,6 +135,7 @@ class Simulator(SimulatorBackend):
 
         self.initialize_agent(agent_id, initial_agent_state)
 
+    @sim_profiling_utils.RangeContext("_config_backend")
     def _config_backend(self, config: Configuration):
         if not self._initialized:
             super().__init__(config.sim_cfg)
@@ -146,6 +149,7 @@ class Simulator(SimulatorBackend):
             for cfg in config.agents
         ]
 
+    @sim_profiling_utils.RangeContext("_config_pathfinder")
     def _config_pathfinder(self, config: Configuration):
         if "navmesh" in config.sim_cfg.scene.filepaths:
             navmesh_filenname = config.sim_cfg.scene.filepaths["navmesh"]
@@ -166,7 +170,8 @@ class Simulator(SimulatorBackend):
 
         self.pathfinder = PathFinder()
         if osp.exists(navmesh_filenname):
-            self.pathfinder.load_nav_mesh(navmesh_filenname)
+            with sim_profiling_utils.RangeContext("self.pathfinder.load_nav_mesh"):
+                self.pathfinder.load_nav_mesh(navmesh_filenname)
             logger.info(f"Loaded navmesh {navmesh_filenname}")
         else:
             logger.warning(
@@ -186,7 +191,8 @@ class Simulator(SimulatorBackend):
             navmesh_settings.set_defaults()
             navmesh_settings.agent_radius = default_agent_config.radius
             navmesh_settings.agent_height = default_agent_config.height
-            self.recompute_navmesh(self.pathfinder, navmesh_settings)
+            with sim_profiling_utils.RangeContext("self.recompute_navmesh"):
+                self.recompute_navmesh(self.pathfinder, navmesh_settings)
 
         self.pathfinder.seed(config.sim_cfg.random_seed)
 
@@ -197,6 +203,7 @@ class Simulator(SimulatorBackend):
             self.__set_from_config(config)
             self.config = config
 
+    @sim_profiling_utils.RangeContext("__set_from_config")
     def __set_from_config(self, config: Configuration):
         self._config_backend(config)
         self._config_agents(config)
@@ -255,7 +262,8 @@ class Simulator(SimulatorBackend):
 
         # step physics by dt
         step_start_Time = time.time()
-        super().step_world(dt)
+        with sim_profiling_utils.RangeContext("super().step_world(dt)"):
+            super().step_world(dt)
         _previous_step_time = time.time() - step_start_Time
 
         observations = self.get_sensor_observations()
@@ -419,7 +427,8 @@ class Sensor:
             render_flags |= habitat_sim.gfx.Camera.Flags.FRUSTUM_CULLING
 
         with self._sensor_object.render_target as tgt:
-            self._sim.renderer.draw(self._sensor_object, scene, render_flags)
+            with sim_profiling_utils.RangeContext("self._sim.renderer.draw"):
+                self._sim.renderer.draw(self._sensor_object, scene, render_flags)
 
         # add an OBJECT only 2nd pass on the standard SceneGraph if SEMANTIC sensor with separate semantic SceneGraph
         if (
