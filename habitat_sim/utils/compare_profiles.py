@@ -258,6 +258,7 @@ def get_sqlite_filepaths_from_directory(directory):
 def create_arg_parser():
     """For compare_profiles.py script. Includes print formatting options."""
     parser = argparse.ArgumentParser()
+    parser.add_argument("filepaths", nargs="*")
     parser.add_argument(
         "--sort-by",
         default="inclusive",
@@ -283,7 +284,11 @@ def create_arg_parser():
 def main():
     args = create_arg_parser().parse_args()
 
-    filepaths = get_sqlite_filepaths_from_directory("./")
+    filepaths = (
+        args.filepaths
+        if len(args.filepaths)
+        else get_sqlite_filepaths_from_directory("./")
+    )
 
     if len(filepaths) == 0:
         print("No sqlite files were found in the working directory.")
