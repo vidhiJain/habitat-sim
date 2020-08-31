@@ -66,6 +66,7 @@ class SummaryItem:
 
     time_exclusive: int = 0
     time_inclusive: int = 0
+    count: int = 0
 
 
 def get_sqlite_events(conn):
@@ -107,6 +108,7 @@ def create_summary_from_events(events):
 
         event_duration = event.end - event.start
         item.time_inclusive += event_duration
+        item.count += 1
 
         exclusive_duration = 0
 
@@ -157,7 +159,9 @@ def create_summary_from_events(events):
 
 def _display_time_ms(time, args, show_sign=False):
     seconds_to_ms = 0.001
-    return "{}{:,.0f}".format(
+
+    format_str = "{}{:,.2f}" if args.counts else "{}{:,.0f}"
+    return format_str.format(
         "+" if time > 0 and show_sign else "",
         time / (args.source_time_units_per_second * seconds_to_ms),
     )
@@ -195,22 +199,35 @@ def print_summaries(summaries, args, labels=None):
     all_names_with_times_list.sort(reverse=True, key=lambda x: x[1])
 
     column_pad = 2
+    count_width = 6
     time_width = 12
 
     if labels:
         assert len(labels) == len(summaries)
-        max_label_len = time_width * 2 + column_pad
+        max_label_len = (
+            time_width * 2 + column_pad + (count_width + column_pad)
+            if args.counts
+            else 0
+        )
         print("".ljust(max_name_len + column_pad), end="")
         for label in labels:
             short_label = label[-max_label_len:]
             print(short_label.ljust(max_label_len + column_pad), end="")
         print("")
 
-    print(
-        "event name".ljust(max_name_len + column_pad)
-        + "incl (ms)".rjust(time_width).ljust(time_width + column_pad)
-        + "excl (ms)".rjust(time_width).ljust(time_width + column_pad)
-    )
+    if args.counts:
+        print(
+            "event name".ljust(max_name_len + column_pad)
+            + "calls".rjust(count_width).ljust(count_width + column_pad)
+            + "incl (ms/ca)".rjust(time_width).ljust(time_width + column_pad)
+            + "excl (ms/ca)".rjust(time_width).ljust(time_width + column_pad)
+        )
+    else:
+        print(
+            "event name".ljust(max_name_len + column_pad)
+            + "incl (ms)".rjust(time_width).ljust(time_width + column_pad)
+            + "excl (ms)".rjust(time_width).ljust(time_width + column_pad)
+        )
 
     for tup in all_names_with_times_list:
         name = tup[0]
@@ -219,15 +236,34 @@ def print_summaries(summaries, args, labels=None):
             base_summary = summaries[0] if index > 0 else None
             if name in summary:
                 item = summary[name]
+
+                time_inclusive = item.time_inclusive
+                time_exclusive = item.time_exclusive
+                if args.counts:
+                    time_inclusive /= item.count
+                    time_exclusive /= item.count
+
+                show_sign = False
                 if base_summary and print_relative_timings and name in base_summary:
                     base_item = base_summary[name]
-                    time_inclusive = item.time_inclusive - base_item.time_inclusive
-                    time_exclusive = item.time_exclusive - base_item.time_exclusive
+                    base_time_inclusive = base_item.time_inclusive
+                    base_time_exclusive = base_item.time_exclusive
+                    if args.counts:
+                        base_time_inclusive /= base_item.count
+                        base_time_exclusive /= base_item.count
+
+                    time_inclusive -= base_time_inclusive
+                    time_exclusive -= base_time_exclusive
                     show_sign = True
-                else:
-                    time_inclusive = item.time_inclusive
-                    time_exclusive = item.time_exclusive
-                    show_sign = False
+
+                if args.counts:
+                    print(
+                        "{}".format(item.count)
+                        .rjust(count_width)
+                        .ljust(count_width + column_pad),
+                        end="",
+                    )
+
                 print(
                     _display_time_ms(time_inclusive, args, show_sign=show_sign)
                     .rjust(time_width)
@@ -239,8 +275,13 @@ def print_summaries(summaries, args, labels=None):
                 )
             else:
                 print(
-                    "-".ljust(time_width + column_pad)
-                    + "-".ljust(time_width + column_pad),
+                    (
+                        "-".rjust(count_width).ljust(count_width + column_pad)
+                        if args.counts
+                        else ""
+                    )
+                    + "-".rjust(time_width).ljust(time_width + column_pad)
+                    + "-".rjust(time_width).ljust(time_width + column_pad),
                     end="",
                 )
         print("")
@@ -277,6 +318,12 @@ def create_arg_parser():
         action="store_true",
         default=False,
         help="When comparing 2+ profiles, display times as relative to the first profile's times.",
+    )
+    parser.add_argument(
+        "--counts",
+        action="store_true",
+        default=False,
+        help="Show range call counts and show per-call times",
     )
     return parser
 
