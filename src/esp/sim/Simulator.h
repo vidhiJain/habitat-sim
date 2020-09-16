@@ -825,7 +825,7 @@ class Simulator {
 
   bool sampleObjectState(int objectID, int sceneID);
 
-  Magnum::Vector3 findFloorPositionUnderCrosshair(
+  esp::physics::RayHitInfo findFloorPositionUnderCrosshair(
       Magnum::Vector3 point,
       Magnum::Vector3 refPoint,
       const Magnum::Vector2i& viewSize,
