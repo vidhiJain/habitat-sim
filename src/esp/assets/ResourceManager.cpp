@@ -1606,12 +1606,12 @@ bool ResourceManager::importAsset(const std::string& filename,
       numMaterials = 0;
     }
 
-    Corrade::Utility::Debug() << "Handling materials...";
-    Corrade::Utility::Debug() << "numMaterials = " << numMaterials;
-    Corrade::Utility::Debug() << "meshMetaData.materialIndex.second = "
-                              << meshMetaData.materialIndex.second;
-    Corrade::Utility::Debug() << "meshMetaData.materialIndex.first = "
-                              << meshMetaData.materialIndex.first;
+    //Corrade::Utility::Debug() << "Handling materials...";
+    //Corrade::Utility::Debug() << "numMaterials = " << numMaterials;
+    //Corrade::Utility::Debug() << "meshMetaData.materialIndex.second = "
+    //                          << meshMetaData.materialIndex.second;
+    //Corrade::Utility::Debug() << "meshMetaData.materialIndex.first = "
+    //                          << meshMetaData.materialIndex.first;
 
     std::vector<MeshTransformNode*> nodeQueue;
     nodeQueue.push_back(&meshMetaData.root);
@@ -1623,10 +1623,10 @@ bool ResourceManager::importAsset(const std::string& filename,
         nodeQueue.push_back(&child);
       }
       if (node->meshIDLocal != ID_UNDEFINED) {
-        Corrade::Utility::Debug()
-            << "node materialLocalID: " << node->materialIDLocal;
+        //Corrade::Utility::Debug()
+        //    << "node materialLocalID: " << node->materialIDLocal;
         if (node->materialIDLocal == ID_UNDEFINED || material) {
-          Cr::Utility::Debug() << "generating a URDF material";
+          //Cr::Utility::Debug() << "generating a URDF material";
           gfx::PhongMaterialData::uptr phongMaterial =
               gfx::PhongMaterialData::create_unique();
           int newMaterialIndex = nextMaterialID_++;
@@ -1636,9 +1636,9 @@ bool ResourceManager::importAsset(const std::string& filename,
           }
           node->materialIDLocal = numMaterials++;
 
-          Corrade::Utility::Debug()
-              << "mat index after: "
-              << resourceDict_.at(filename).meshMetaData.materialIndex;
+          //Corrade::Utility::Debug()
+          //    << "mat index after: "
+          //    << resourceDict_.at(filename).meshMetaData.materialIndex;
 
           if (material) {
             io::UrdfMaterialColor& color = material->m_matColor;

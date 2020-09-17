@@ -31,7 +31,7 @@ static void setRotationScalingFromBulletTransform(const btTransform& trans,
 ///////////////////////////////////
 
 BulletArticulatedObject::~BulletArticulatedObject() {
-  Corrade::Utility::Debug() << "deconstructing ~BulletArticulatedObject";
+  //Corrade::Utility::Debug() << "deconstructing ~BulletArticulatedObject";
   bWorld_->removeMultiBody(btMultiBody_);
   for (int colIx = 0; colIx < btMultiBody_->getNumLinks(); ++colIx) {
     bWorld_->removeCollisionObject(btMultiBody_->getLinkCollider(colIx));
@@ -62,10 +62,10 @@ bool BulletArticulatedObject::initializeFromURDF(
   // TODO: are these needed? Not used in examples.
   int flags = 0;
 
-  Corrade::Utility::Debug()
-      << "begin - BulletArticulatedObject::initializeFromURDF";
+  //Corrade::Utility::Debug()
+  //    << "begin - BulletArticulatedObject::initializeFromURDF";
 
-  Corrade::Utility::Debug() << "model name: " << urdfModel.m_name;
+  //Corrade::Utility::Debug() << "model name: " << urdfModel.m_name;
 
   URDF2BulletCached cache;
   u2b.InitURDF2BulletCache(cache, flags);
@@ -79,7 +79,7 @@ bool BulletArticulatedObject::initializeFromURDF(
                                  flags, linkCollisionShapes_);
 
   if (cache.m_bulletMultiBody) {
-    Corrade::Utility::Debug() << "post process phase";
+    //Corrade::Utility::Debug() << "post process phase";
 
     btMultiBody* mb = cache.m_bulletMultiBody;
 
@@ -110,11 +110,11 @@ bool BulletArticulatedObject::initializeFromURDF(
     int urdfLinkIx = 0;
     for (auto& link : urdfModel.m_links) {
       int bulletLinkIx = cache.m_urdfLinkIndices2BulletLinkIndices[urdfLinkIx];
-      Corrade::Utility::Debug()
-          << "urdfLinkIx = " << urdfLinkIx
-          << ", m_name = " << link.second->m_name
-          << ", m_linkIndex = " << link.second->m_linkIndex
-          << ", bulletLinkIx = " << bulletLinkIx;
+      //Corrade::Utility::Debug()
+      //    << "urdfLinkIx = " << urdfLinkIx
+      //    << ", m_name = " << link.second->m_name
+      //    << ", m_linkIndex = " << link.second->m_linkIndex
+      //    << ", bulletLinkIx = " << bulletLinkIx;
       scene::SceneNode* linkNode = &node();
       if (bulletLinkIx >= 0) {
         links_[bulletLinkIx] = std::make_unique<BulletArticulatedLink>(
@@ -126,7 +126,7 @@ bool BulletArticulatedObject::initializeFromURDF(
       bool success = attachGeometry(*linkNode, link.second,
                                     urdfImporter.getModel().m_materials,
                                     resourceManager, drawables);
-      Corrade::Utility::Debug() << "geomSuccess: " << success;
+      //Corrade::Utility::Debug() << "geomSuccess: " << success;
 
       urdfLinkIx++;
     }
@@ -148,8 +148,8 @@ bool BulletArticulatedObject::initializeFromURDF(
     }
   }
 
-  Corrade::Utility::Debug()
-      << "done - BulletArticulatedObject::initializeFromURDF";
+  //Corrade::Utility::Debug()
+  //    << "done - BulletArticulatedObject::initializeFromURDF";
   return true;
 }
 
@@ -190,24 +190,24 @@ bool BulletArticulatedObject::attachGeometry(
 
     switch (visual.m_geometry.m_type) {
       case io::URDF_GEOM_CAPSULE:
-        Corrade::Utility::Debug() << "Trying to add visual capsule";
+        //Corrade::Utility::Debug() << "Trying to add visual capsule";
         // TODO:
         break;
       case io::URDF_GEOM_CYLINDER:
-        Corrade::Utility::Debug() << "Trying to add visual cylinder";
+        //Corrade::Utility::Debug() << "Trying to add visual cylinder";
         // TODO:
         break;
       case io::URDF_GEOM_BOX:
-        Corrade::Utility::Debug() << "Trying to add visual box";
+        //Corrade::Utility::Debug() << "Trying to add visual box";
         // TODO:
         break;
       case io::URDF_GEOM_SPHERE:
-        Corrade::Utility::Debug() << "Trying to add visual sphere";
+        //Corrade::Utility::Debug() << "Trying to add visual sphere";
         // TODO:
         break;
       case io::URDF_GEOM_MESH: {
-        Corrade::Utility::Debug() << "visual.m_geometry.m_meshFileName = "
-                                  << visual.m_geometry.m_meshFileName;
+        //Corrade::Utility::Debug() << "visual.m_geometry.m_meshFileName = "
+        //                          << visual.m_geometry.m_meshFileName;
         // visual.m_sourceFileLocation
         visualGeomComponent.scale(visual.m_geometry.m_meshScale);
 
@@ -219,8 +219,8 @@ bool BulletArticulatedObject::attachGeometry(
         bool meshSuccess = resourceManager.importAsset(
             visual.m_geometry.m_meshFileName, material);
         if (!meshSuccess) {
-          Cr::Utility::Debug() << "Failed to import the render asset: "
-                               << visual.m_geometry.m_meshFileName;
+          //Cr::Utility::Debug() << "Failed to import the render asset: "
+          //                     << visual.m_geometry.m_meshFileName;
           return false;
         }
         // then attach
@@ -228,7 +228,7 @@ bool BulletArticulatedObject::attachGeometry(
             visual.m_geometry.m_meshFileName, visualGeomComponent, drawables);
       } break;
       case io::URDF_GEOM_PLANE:
-        Corrade::Utility::Debug() << "Trying to add visual plane";
+        //Corrade::Utility::Debug() << "Trying to add visual plane";
         // TODO:
         break;
     }
@@ -420,8 +420,8 @@ std::map<int, int> BulletArticulatedObject::createMotorsForAllDofs(
       dofCount += btMultiBody_->getLink(linkIx).m_dofCount;
     }
   }
-  Mn::Debug{} << "BulletArticulatedObject::createMotorsForAllDofs(): "
-              << dofsToMotorIds;
+  //Mn::Debug{} << "BulletArticulatedObject::createMotorsForAllDofs(): "
+  //            << dofsToMotorIds;
   return dofsToMotorIds;
 }
 

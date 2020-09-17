@@ -34,8 +34,8 @@ bool URDFParser::parseURDF(const std::string& filename) {
         << "URDFParser::parseURDF - XML parse error, aborting URDF parse/load.";
     return false;
   }
-  Corrade::Utility::Debug()
-      << "URDFParser::parseURDF - XML parsed starting URDF parse/load.";
+  //Corrade::Utility::Debug()
+  //    << "URDFParser::parseURDF - XML parsed starting URDF parse/load.";
 
   XMLElement* robot_xml = xml_doc.FirstChildElement("robot");
   if (!robot_xml) {
@@ -133,7 +133,7 @@ bool URDFParser::parseURDF(const std::string& filename) {
   }
   m_urdfModel = newURDFModel;
 
-  Corrade::Utility::Debug() << "Done parsing URDF";
+  //Corrade::Utility::Debug() << "Done parsing URDF";
 
   return true;
 }
@@ -231,8 +231,8 @@ bool URDFParser::parseLink(UrdfModel& model,
     Corrade::Utility::Debug() << "E - Link with no name";
     return false;
   }
-  Corrade::Utility::Debug() << "------------------------------------";
-  Corrade::Utility::Debug() << "URDFParser::parseLink: " << linkName;
+  //Corrade::Utility::Debug() << "------------------------------------";
+  //Corrade::Utility::Debug() << "URDFParser::parseLink: " << linkName;
   link.m_name = linkName;
 
   {
@@ -363,10 +363,10 @@ bool URDFParser::parseLink(UrdfModel& model,
       link.m_inertia.m_iyy = 0.f;
       link.m_inertia.m_izz = 0.f;
     } else {
-      Corrade::Utility::Debug()
-          << "W - No inertial data for link: " << link.m_name
-          << ", using mass=1, localinertiadiagonal = 1,1,1, identity local "
-             "inertial frame";
+      //Corrade::Utility::Debug()
+      //    << "W - No inertial data for link: " << link.m_name
+      //    << ", using mass=1, localinertiadiagonal = 1,1,1, identity local "
+      //       "inertial frame";
       link.m_inertia.m_mass = 1.f;
       link.m_inertia.m_linkLocalFrame = Mn::Matrix4();  // Identity
       link.m_inertia.m_ixx = 1.f;
@@ -1056,19 +1056,19 @@ void printLinkChildrenHelper(UrdfLink& link, std::string printPrefix = "") {
 }
 
 void UrdfModel::printKinematicChain() const {
-  Corrade::Utility::Debug()
-      << "------------------------------------------------------";
-  Corrade::Utility::Debug()
-      << "UrdfModel::printKinematicChain: model = " << m_name;
-  int rootIndex = 0;
-  for (auto& root : m_rootLinks) {
-    Corrade::Utility::Debug()
-        << "root L(" << rootIndex << "): " << root->m_name;
-    printLinkChildrenHelper(*root);
-    rootIndex++;
-  }
-  Corrade::Utility::Debug()
-      << "------------------------------------------------------";
+  //Corrade::Utility::Debug()
+  //    << "------------------------------------------------------";
+  //Corrade::Utility::Debug()
+  //    << "UrdfModel::printKinematicChain: model = " << m_name;
+  //int rootIndex = 0;
+  //for (auto& root : m_rootLinks) {
+  //  Corrade::Utility::Debug()
+  //      << "root L(" << rootIndex << "): " << root->m_name;
+  //  printLinkChildrenHelper(*root);
+  //  rootIndex++;
+  //}
+  //Corrade::Utility::Debug()
+  //    << "------------------------------------------------------";
 }
 
 }  // namespace io

@@ -23,7 +23,7 @@ bool URDFImporter::loadURDF(const std::string& filename) {
 
   bool success = urdfParser_.parseURDF(filename);
 
-  Corrade::Utility::Debug() << "Done loading";
+  //Corrade::Utility::Debug() << "Done loading";
 
   getModel().printKinematicChain();
 
@@ -84,8 +84,8 @@ bool URDFImporter::getJointInfo2(int linkIndex,
       jointFriction = pj->m_jointFriction;
       jointMaxForce = pj->m_effortLimit;
       jointMaxVelocity = pj->m_velocityLimit;
-      Corrade::Utility::Debug()
-          << "  parent2joint = " << Magnum::Matrix4{parent2joint};
+      //Corrade::Utility::Debug()
+      //    << "  parent2joint = " << Magnum::Matrix4{parent2joint};
       return true;
     } else {
       parent2joint = Mn::Matrix4();  // Identity
@@ -119,7 +119,7 @@ void URDFImporter::getMassAndInertia2(int linkIndex,
                                       Mn::Matrix4& inertialFrame,
                                       int flags) const {
   if (flags & CUF_USE_URDF_INERTIA) {
-    Corrade::Utility::Debug() << "using URDF inertia values...";
+    //Corrade::Utility::Debug() << "using URDF inertia values...";
     getMassAndInertia(linkIndex, mass, localInertiaDiagonal, inertialFrame);
   } else {
     // the link->m_inertia is NOT necessarily aligned with the inertial frame
