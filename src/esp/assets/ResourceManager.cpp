@@ -29,12 +29,14 @@
 #include <Magnum/Trade/AbstractImporter.h>
 #include <Magnum/Trade/ImageData.h>
 #include <Magnum/Trade/MeshObjectData3D.h>
+#include <Magnum/Trade/PbrMetallicRoughnessMaterialData.h>
 #include <Magnum/Trade/PhongMaterialData.h>
 #include <Magnum/Trade/SceneData.h>
 #include <Magnum/Trade/TextureData.h>
 
 #include "esp/geo/geo.h"
 #include "esp/gfx/GenericDrawable.h"
+#include "esp/gfx/MaterialUtil.h"
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
@@ -1133,23 +1135,42 @@ void ResourceManager::loadMaterials(Importer& importer,
     // as long as the materialName includes the full path to the material
     Cr::Containers::Optional<Mn::Trade::MaterialData> materialData =
         importer.material(iMaterial);
-    if (!materialData ||
-        !(materialData->types() & Magnum::Trade::MaterialType::Phong)) {
+
+    if (!materialData) {
       LOG(ERROR) << "Cannot load material, skipping";
       continue;
     }
 
-    const auto& phongMaterialData =
-        static_cast<Mn::Trade::PhongMaterialData&>(*materialData);
     std::unique_ptr<gfx::MaterialData> finalMaterial;
     int textureBaseIndex = loadedAssetData.meshMetaData.textureIndex.first;
-    if (loadedAssetData.assetInfo.requiresLighting) {
-      finalMaterial =
-          buildPhongShadedMaterialData(phongMaterialData, textureBaseIndex);
 
+    if (loadedAssetData.assetInfo.requiresLighting &&
+        materialData->types() &
+            Magnum::Trade::MaterialType::PbrMetallicRoughness) {
+      const Mn::Trade::PbrMetallicRoughnessMaterialData&
+          pbrMetallicRoughnessMaterialData =
+              static_cast<Mn::Trade::PbrMetallicRoughnessMaterialData&>(
+                  *materialData);
+
+      finalMaterial = gfx::buildPhongFromPbrMetallicRoughness(
+          pbrMetallicRoughnessMaterialData, textureBaseIndex, textures_);
     } else {
-      finalMaterial =
-          buildFlatShadedMaterialData(phongMaterialData, textureBaseIndex);
+      ASSERT(materialData);
+      if (!(materialData->types() & Magnum::Trade::MaterialType::Phong)) {
+        LOG(ERROR) << "Cannot load material, skipping";
+        continue;
+      }
+
+      const auto& phongMaterialData =
+          materialData->as<Mn::Trade::PhongMaterialData>();
+      if (loadedAssetData.assetInfo.requiresLighting) {
+        finalMaterial =
+            buildPhongShadedMaterialData(phongMaterialData, textureBaseIndex);
+
+      } else {
+        finalMaterial =
+            buildFlatShadedMaterialData(phongMaterialData, textureBaseIndex);
+      }
     }
     // for now, just use unique ID for material key. This may change if we
     // expose materials to user for post-load modification
@@ -1606,11 +1627,11 @@ bool ResourceManager::importAsset(const std::string& filename,
       numMaterials = 0;
     }
 
-    //Corrade::Utility::Debug() << "Handling materials...";
-    //Corrade::Utility::Debug() << "numMaterials = " << numMaterials;
-    //Corrade::Utility::Debug() << "meshMetaData.materialIndex.second = "
+    // Corrade::Utility::Debug() << "Handling materials...";
+    // Corrade::Utility::Debug() << "numMaterials = " << numMaterials;
+    // Corrade::Utility::Debug() << "meshMetaData.materialIndex.second = "
     //                          << meshMetaData.materialIndex.second;
-    //Corrade::Utility::Debug() << "meshMetaData.materialIndex.first = "
+    // Corrade::Utility::Debug() << "meshMetaData.materialIndex.first = "
     //                          << meshMetaData.materialIndex.first;
 
     std::vector<MeshTransformNode*> nodeQueue;
@@ -1623,10 +1644,10 @@ bool ResourceManager::importAsset(const std::string& filename,
         nodeQueue.push_back(&child);
       }
       if (node->meshIDLocal != ID_UNDEFINED) {
-        //Corrade::Utility::Debug()
+        // Corrade::Utility::Debug()
         //    << "node materialLocalID: " << node->materialIDLocal;
         if (node->materialIDLocal == ID_UNDEFINED || material) {
-          //Cr::Utility::Debug() << "generating a URDF material";
+          // Cr::Utility::Debug() << "generating a URDF material";
           gfx::PhongMaterialData::uptr phongMaterial =
               gfx::PhongMaterialData::create_unique();
           int newMaterialIndex = nextMaterialID_++;
@@ -1636,7 +1657,7 @@ bool ResourceManager::importAsset(const std::string& filename,
           }
           node->materialIDLocal = numMaterials++;
 
-          //Corrade::Utility::Debug()
+          // Corrade::Utility::Debug()
           //    << "mat index after: "
           //    << resourceDict_.at(filename).meshMetaData.materialIndex;
 
