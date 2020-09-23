@@ -66,6 +66,8 @@ class Simulator(SimulatorBackend):
     _previous_step_time: float = attr.ib(
         default=0.0, init=False
     )  # track the compute time of each step
+    _scene_objects: List = []
+    render_to_ui: bool = False
 
     @staticmethod
     def _sanitize_config(config: Configuration) -> None:
@@ -159,7 +161,11 @@ class Simulator(SimulatorBackend):
 
     def _config_agents(self, config: Configuration) -> None:
         self.agents = [
-            Agent(self.get_active_scene_graph().get_root_node().create_child(), cfg)
+            Agent(
+                self.get_active_scene_graph().get_root_node().create_child(),
+                cfg,
+                sim=self,
+            )
             for cfg in config.agents
         ]
 
@@ -249,16 +255,49 @@ class Simulator(SimulatorBackend):
 
     def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]:
         for _, sensor in self._sensors.items():
-            sensor.draw_observation()
+            sensor.draw_observation(self.render_to_ui)
 
         observations = {}
         for sensor_uuid, sensor in self._sensors.items():
-            observations[sensor_uuid] = sensor.get_observation()
+            if self.render_to_ui:
+                observations[sensor_uuid] = None
+            else:
+                observations[sensor_uuid] = sensor.get_observation()
 
         return observations
 
     def last_state(self):
         return self._last_state
+
+    def get_crosshair_position(self):
+        resolution = (
+            self._default_agent.agent_config.sensor_specifications[0].resolution * 0.5
+        )
+        return mn.Vector2(list(map(int, resolution)))
+
+    def get_resolution(self):
+        resolution = self._default_agent.agent_config.sensor_specifications[
+            0
+        ].resolution
+        return mn.Vector2(list(map(int, resolution)))
+
+    def add_object_in_scene(self, objectId, data):
+        data["objectId"] = objectId
+        self._scene_objects.append(data)
+
+    def update_object_in_scene(self, prevObjectId, newObjectId):
+        for index in range(len(self._scene_objects)):
+            if self._scene_objects[index]["objectId"] == prevObjectId:
+                self._scene_objects[index]["objectId"] = newObjectId
+
+    def get_object_from_scene(self, objectId):
+        for index in range(len(self._scene_objects)):
+            if self._scene_objects[index]["objectId"] == objectId:
+                return self._scene_objects[index]
+        return None
+
+    def update_cross_hair(self):
+        self.update_cross_hair_node(self.get_crosshair_position())
 
     def step(
         self, action: Any, dt: float = 1.0 / 60.0
@@ -392,7 +431,7 @@ class Sensor:
             self._spec.noise_model, self._spec.uuid
         )
 
-    def draw_observation(self) -> None:
+    def draw_observation(self, render_to_ui=False):
         # sanity check:
 
         # see if the sensor is attached to a scene graph, otherwise it is invalid,
@@ -428,8 +467,11 @@ class Sensor:
         if self._sim.frustum_culling:
             render_flags |= habitat_sim.gfx.Camera.Flags.FRUSTUM_CULLING
 
-        with self._sensor_object.render_target:
+        if render_to_ui:
             self._sim.renderer.draw(self._sensor_object, scene, render_flags)
+        else:
+            with self._sensor_object.render_target:
+                self._sim.renderer.draw(self._sensor_object, scene, render_flags)
 
         # add an OBJECT only 2nd pass on the standard SceneGraph if SEMANTIC sensor with separate semantic SceneGraph
         if (
