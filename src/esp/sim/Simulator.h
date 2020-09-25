@@ -762,6 +762,10 @@ class Simulator {
    */
   core::Random::ptr random() { return random_; }
 
+  int getNumActiveContactPoints() {
+    return physicsManager_->getNumActiveContactPoints();
+  }
+
  protected:
   Simulator(){};
 
