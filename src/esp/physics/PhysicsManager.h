@@ -1120,6 +1120,8 @@ class PhysicsManager {
     return existingArticulatedObjects_.at(objectId)->getMotionType();
   };
 
+  virtual int getNumActiveContactPoints() { return -1; }
+
  protected:
   /** @brief Check that a given object ID is valid (i.e. it refers to an
    * existing object). Terminate the program and report an error if not. This

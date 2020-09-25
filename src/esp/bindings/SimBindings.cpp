@@ -302,7 +302,11 @@ void initSimBindings(py::module& m) {
       .def("get_existing_joint_motors", &Simulator::getExistingJointMotors,
            "object_id"_a)
       .def("create_motors_for_all_dofs", &Simulator::createMotorsForAllDofs,
-           "object_id"_a, "settings"_a = esp::physics::JointMotorSettings());
+           "object_id"_a, "settings"_a = esp::physics::JointMotorSettings())
+
+      .def("get_num_active_contact_points",
+           &Simulator::getNumActiveContactPoints);
+
   ;
 }
 
