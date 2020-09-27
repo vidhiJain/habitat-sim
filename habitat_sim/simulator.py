@@ -253,7 +253,11 @@ class Simulator(SimulatorBackend):
         self._last_state = agent.state
         return agent
 
-    def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]:
+    def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]::
+        # to handle case of rendering cross hair
+        for _, sensor in self._sensors.items():
+            sensor.draw_observation(self.render_to_ui)
+        self.update_cross_hair()
         for _, sensor in self._sensors.items():
             sensor.draw_observation(self.render_to_ui)
 
@@ -273,13 +277,15 @@ class Simulator(SimulatorBackend):
         resolution = (
             self._default_agent.agent_config.sensor_specifications[0].resolution * 0.5
         )
-        return mn.Vector2(list(map(int, resolution)))
+        res = list(map(int, resolution))
+        return mn.Vector2([res[1], res[0]])
 
     def get_resolution(self):
         resolution = self._default_agent.agent_config.sensor_specifications[
             0
         ].resolution
-        return mn.Vector2(list(map(int, resolution)))
+        res = list(map(int, resolution))
+        return mn.Vector2([res[1], res[0]])
 
     def add_object_in_scene(self, objectId, data):
         data["objectId"] = objectId
