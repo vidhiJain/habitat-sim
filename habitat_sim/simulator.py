@@ -141,6 +141,7 @@ class Simulator(SimulatorBackend):
         super().reset()
         for i in range(len(self.agents)):
             self.reset_agent(i)
+        self.update_cross_hair()
 
         return self.get_sensor_observations()
 
