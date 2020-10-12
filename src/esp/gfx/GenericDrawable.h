@@ -51,6 +51,8 @@ class GenericDrawable : public Drawable {
   Magnum::Resource<LightSetup> lightSetup_;
 };
 
+extern bool g_disableColorTextures;
+
 }  // namespace gfx
 }  // namespace esp
 

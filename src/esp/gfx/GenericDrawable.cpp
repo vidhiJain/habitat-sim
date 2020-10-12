@@ -16,6 +16,8 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 
+bool g_disableColorTextures = false;
+
 GenericDrawable::GenericDrawable(scene::SceneNode& node,
                                  Mn::GL::Mesh& mesh,
                                  ShaderManager& shaderManager,
@@ -97,15 +99,17 @@ void GenericDrawable::draw(const Mn::Matrix4& transformationMatrix,
       .setProjectionMatrix(camera.projectionMatrix())
       .setNormalMatrix(transformationMatrix.rotationScaling());
 
-  if (materialData_->textureMatrix != Mn::Matrix3{})
-    shader_->setTextureMatrix(materialData_->textureMatrix);
+  if (!g_disableColorTextures) {
+    if (materialData_->textureMatrix != Mn::Matrix3{})
+      shader_->setTextureMatrix(materialData_->textureMatrix);
 
-  if (materialData_->ambientTexture)
-    shader_->bindAmbientTexture(*(materialData_->ambientTexture));
-  if (materialData_->diffuseTexture)
-    shader_->bindDiffuseTexture(*(materialData_->diffuseTexture));
-  if (materialData_->specularTexture)
-    shader_->bindSpecularTexture(*(materialData_->specularTexture));
+    if (materialData_->ambientTexture)
+      shader_->bindAmbientTexture(*(materialData_->ambientTexture));
+    if (materialData_->diffuseTexture)
+      shader_->bindDiffuseTexture(*(materialData_->diffuseTexture));
+    if (materialData_->specularTexture)
+      shader_->bindSpecularTexture(*(materialData_->specularTexture));
+  }
   if (materialData_->normalTexture)
     shader_->bindNormalTexture(*(materialData_->normalTexture));
 
@@ -116,14 +120,17 @@ void GenericDrawable::updateShader() {
   Mn::UnsignedInt lightCount = lightSetup_->size();
   Mn::Shaders::Phong::Flags flags = Mn::Shaders::Phong::Flag::ObjectId;
 
-  if (materialData_->textureMatrix != Mn::Matrix3{})
-    flags |= Mn::Shaders::Phong::Flag::TextureTransformation;
-  if (materialData_->ambientTexture)
-    flags |= Mn::Shaders::Phong::Flag::AmbientTexture;
-  if (materialData_->diffuseTexture)
-    flags |= Mn::Shaders::Phong::Flag::DiffuseTexture;
-  if (materialData_->specularTexture)
-    flags |= Mn::Shaders::Phong::Flag::SpecularTexture;
+  if (!g_disableColorTextures) {
+    if (materialData_->textureMatrix != Mn::Matrix3{})
+      flags |= Mn::Shaders::Phong::Flag::TextureTransformation;
+
+    if (materialData_->ambientTexture)
+      flags |= Mn::Shaders::Phong::Flag::AmbientTexture;
+    if (materialData_->diffuseTexture)
+      flags |= Mn::Shaders::Phong::Flag::DiffuseTexture;
+    if (materialData_->specularTexture)
+      flags |= Mn::Shaders::Phong::Flag::SpecularTexture;
+  }
   if (materialData_->normalTexture)
     flags |= Mn::Shaders::Phong::Flag::NormalTexture;
   if (materialData_->perVertexObjectId)
