@@ -259,6 +259,9 @@ class CMakeBuild(build_ext):
         ]
         cmake_args += ["-DBUILD_WITH_CUDA={}".format("ON" if args.with_cuda else "OFF")]
 
+        if True and args.with_cuda:
+            cmake_args += ["-DCMAKE_CUDA_HOST_COMPILER=/usr/bin/cuda-g++"]
+
         env = os.environ.copy()
         env["CXXFLAGS"] = '{} -DVERSION_INFO=\\"{}\\"'.format(
             env.get("CXXFLAGS", ""), self.distribution.get_version()
@@ -290,6 +293,9 @@ class CMakeBuild(build_ext):
                     osp.abspath(osp.join(self.build_temp, "utils/viewer/viewer")),
                     link_dst,
                 )
+        
+        print("quitting after building extention!")
+        quit()
 
     def run_cmake(self, cmake_args):
         if args.force_cmake:
