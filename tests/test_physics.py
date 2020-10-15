@@ -224,7 +224,9 @@ def test_dynamics(sim):
             == habitat_sim.physics.MotionType.KINEMATIC
         )
 
-        sim.step(random.choice(list(hab_cfg.agents[0].action_space.keys())))
+            # velocity setting for KINEMATIC objects won't be simulated, but will be recorded for bullet internal usage.
+            sim.set_linear_velocity(test_lin_vel, object2_id)
+            assert sim.get_linear_velocity(object2_id) == test_lin_vel
 
         # 2nd object should no longer rotate or translate
         assert np.allclose(
