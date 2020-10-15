@@ -63,7 +63,7 @@ from PIL import Image
 
 import habitat_sim
 from habitat_sim.utils import common as utils
-from habitat_sim.utils import viz_utils as vut
+from habitat_utils import viz_utils as vut
 
 # %cd /content/habitat-sim
 
@@ -92,7 +92,7 @@ if not os.path.exists(output_path):
 
 # Change to do something like this maybe: https://stackoverflow.com/a/41432704
 def display_sample(rgb_obs, semantic_obs=np.array([]), depth_obs=np.array([])):
-    from habitat_sim.utils.common import d3_40_colors_rgb
+    from habitat_utils.common import d3_40_colors_rgb
 
     rgb_img = Image.fromarray(rgb_obs, mode="RGBA")
 

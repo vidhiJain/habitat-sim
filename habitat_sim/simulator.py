@@ -28,7 +28,7 @@ from habitat_sim.nav import GreedyGeodesicFollower, NavMeshSettings, PathFinder
 from habitat_sim.sensor import SensorType
 from habitat_sim.sensors.noise_models import make_sensor_noise_model
 from habitat_sim.sim import SimulatorBackend, SimulatorConfiguration
-from habitat_sim.utils.common import quat_from_angle_axis
+from habitat_utils.common import quat_from_angle_axis
 
 
 @attr.s(auto_attribs=True, slots=True)

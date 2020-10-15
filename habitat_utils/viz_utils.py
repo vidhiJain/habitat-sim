@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 from tqdm.auto import tqdm
 
-from habitat_sim.utils.common import d3_40_colors_rgb
+from habitat_utils.common import d3_40_colors_rgb
 
 
 def is_notebook() -> bool:

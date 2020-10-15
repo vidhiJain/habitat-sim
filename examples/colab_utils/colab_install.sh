@@ -45,6 +45,7 @@ pip install . #Reinstall to trigger sys.path update
 pip install -U --force-reinstall cffi #Fix bug with CFFI version issue
 cd /content/habitat-sim/
 rm -rf habitat_sim/ # Deletes the habitat_sim folder so it doesn't interfere with import path
+rm -rf habitat_utils/ # Deletes the habitat_utils folder so it doesn't interfere with import path
 
 #Download Assets
 wget -c http://dl.fbaipublicfiles.com/habitat/habitat-test-scenes.zip && unzip -o habitat-test-scenes.zip

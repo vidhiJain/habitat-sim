@@ -7,7 +7,7 @@ from quaternion import quaternion
 
 import habitat_sim
 from habitat_sim import registry as registry
-from habitat_sim.utils.common import quat_from_two_vectors
+from habitat_utils.common import quat_from_two_vectors
 
 
 class TopdownView(object):

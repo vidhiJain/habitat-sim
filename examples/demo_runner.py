@@ -18,7 +18,7 @@ import habitat_sim
 import habitat_sim.agent
 from habitat_sim import bindings as hsim
 from habitat_sim.physics import MotionType
-from habitat_sim.utils.common import (
+from habitat_utils.common import (
     d3_40_colors_rgb,
     download_and_unzip,
     quat_from_angle_axis,

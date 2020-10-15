@@ -15,7 +15,7 @@ import quaternion  # noqa: F401
 import habitat_sim
 import habitat_sim.errors
 from examples.settings import make_cfg
-from habitat_sim.utils.common import quat_from_coeffs
+from habitat_utils.common import quat_from_coeffs
 
 
 def _render_and_load_gt(sim, scene, sensor_type, gpu2gpu):

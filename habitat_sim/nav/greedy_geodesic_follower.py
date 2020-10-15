@@ -11,7 +11,7 @@ from habitat_sim.nav import (  # type: ignore
     GreedyGeodesicFollowerImpl,
     PathFinder,
 )
-from habitat_sim.utils.common import quat_to_magnum
+from habitat_utils.common import quat_to_magnum
 
 
 @attr.s(auto_attribs=True, init=False)

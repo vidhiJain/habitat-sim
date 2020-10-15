@@ -9,7 +9,7 @@ import quaternion  # noqa: F401
 
 import habitat_sim
 import habitat_sim.errors
-from habitat_sim.utils.common import angle_between_quats, quat_from_angle_axis
+from habitat_utils.common import angle_between_quats, quat_from_angle_axis
 
 
 def _check_state_same(s1, s2):

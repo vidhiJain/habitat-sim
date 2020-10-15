@@ -10,7 +10,7 @@ import numpy as np
 import quaternion  # noqa: F401
 
 import habitat_sim
-from habitat_sim.utils.common import quat_from_angle_axis, quat_rotate_vector
+from habitat_utils.common import quat_from_angle_axis, quat_rotate_vector
 
 try:
     import pprint

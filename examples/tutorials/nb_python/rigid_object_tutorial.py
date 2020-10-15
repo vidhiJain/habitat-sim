@@ -34,7 +34,7 @@ import magnum as mn
 import numpy as np
 
 import habitat_sim
-from habitat_sim.utils import viz_utils as vut
+from habitat_utils import viz_utils as vut
 
 if "google.colab" in sys.modules:
     os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"

@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 
 import habitat_sim
 import habitat_sim.errors
-from habitat_sim.utils.common import angle_between_quats, quat_from_angle_axis
+from habitat_utils.common import angle_between_quats, quat_from_angle_axis
 
 
 def test_no_action():

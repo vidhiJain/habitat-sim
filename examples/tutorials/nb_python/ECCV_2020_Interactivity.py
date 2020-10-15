@@ -70,7 +70,7 @@ from PIL import Image
 
 import habitat_sim
 from habitat_sim.utils import common as ut
-from habitat_sim.utils import viz_utils as vut
+from habitat_utils import viz_utils as vut
 
 if "google.colab" in sys.modules:
     os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
@@ -308,7 +308,7 @@ def sample_object_state(
 def display_sample(
     rgb_obs, semantic_obs=np.array([]), depth_obs=np.array([]), key_points=None
 ):
-    from habitat_sim.utils.common import d3_40_colors_rgb
+    from habitat_utils.common import d3_40_colors_rgb
 
     rgb_img = Image.fromarray(rgb_obs, mode="RGBA")
 
