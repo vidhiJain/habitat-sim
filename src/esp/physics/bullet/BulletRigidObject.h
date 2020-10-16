@@ -431,17 +431,7 @@ class BulletRigidObject : public BulletBase,
    * updates. See @ref btRigidBody::setWorldTransform. */
   void syncPose() override;
 
-  /**
-   * @brief construct a @ref btRigidBody for this object configured by
-   * MotionType and add it to the world.
-   */
-  void constructAndAddRigidBody(MotionType mt);
-
-  /**
-   * @brief Iterate through all collision objects and active all objects sharing
-   * a collision island tag with this object's collision shape.
-   */
-  void activateCollisionIsland();
+  std::string getCollisionDebugName();
 
  private:
   // === Physical object ===

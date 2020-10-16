@@ -762,8 +762,14 @@ class Simulator {
    */
   core::Random::ptr random() { return random_; }
 
-  int getNumActiveContactPoints() {
+  int getPhysicsNumActiveContactPoints() {
     return physicsManager_->getNumActiveContactPoints();
+  }
+  int getPhysicsNumActiveOverlappingPairs() {
+    return physicsManager_->getNumActiveOverlappingPairs();
+  }
+  std::string getPhysicsStepCollisionSummary() {
+    return physicsManager_->getStepCollisionSummary();
   }
 
  protected:

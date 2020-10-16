@@ -304,10 +304,18 @@ void initSimBindings(py::module& m) {
       .def("create_motors_for_all_dofs", &Simulator::createMotorsForAllDofs,
            "object_id"_a, "settings"_a = esp::physics::JointMotorSettings())
 
-      .def("get_num_active_contact_points",
-           &Simulator::getNumActiveContactPoints);
-
-  ;
+      .def(
+          "get_physics_num_active_contact_points",
+          &Simulator::getPhysicsNumActiveContactPoints,
+          R"(The number of contact points that were active during the last step. An object resting on another object will involve several active contact points. Once both objects are asleep, the contact points are inactive. This count is a proxy for complexity/cost of collision-handling in the current scene.)")
+      .def(
+          "get_physics_num_active_overlapping_pairs",
+          &Simulator::getPhysicsNumActiveOverlappingPairs,
+          R"(The number of active overlapping pairs during the last step. When object bounding boxes overlap and either object is active, additional "narrowphase" collision-detection must be run. This count is a proxy for complexity/cost of collision-handling in the current scene.)")
+      .def(
+          "get_physics_step_collision_summary",
+          &Simulator::getPhysicsStepCollisionSummary,
+          R"(Get a summary of collision-processing from the last physics step.)");
 }
 
 }  // namespace sim

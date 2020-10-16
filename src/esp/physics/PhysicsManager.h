@@ -1121,6 +1121,8 @@ class PhysicsManager {
   };
 
   virtual int getNumActiveContactPoints() { return -1; }
+  virtual int getNumActiveOverlappingPairs() { return -1; }
+  virtual std::string getStepCollisionSummary() { return "not implemented"; }
 
  protected:
   /** @brief Check that a given object ID is valid (i.e. it refers to an
