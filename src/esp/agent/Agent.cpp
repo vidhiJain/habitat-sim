@@ -21,7 +21,7 @@ const std::set<std::string> Agent::BodyActions = {"moveRight",   "moveLeft",
                                                   "turnLeft",    "turnRight"};
 
 Agent::Agent(scene::SceneNode& agentNode, const AgentConfiguration& cfg)
-    : Magnum::SceneGraph::AbstractFeature3D(agentNode),
+    : agentNode_(&agentNode),
       configuration_(cfg),
       sensors_(),
       controls_(scene::ObjectControls::create()) {

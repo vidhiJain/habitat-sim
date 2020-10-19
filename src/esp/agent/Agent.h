@@ -80,7 +80,7 @@ bool operator==(const AgentConfiguration& a, const AgentConfiguration& b);
 bool operator!=(const AgentConfiguration& a, const AgentConfiguration& b);
 
 // Represents an agent that can act within an environment
-class Agent : public Magnum::SceneGraph::AbstractFeature3D {
+class Agent {
  public:
   // constructor: the status of the agent, sensors is "valid" after
   // construction; user can use them immediately
@@ -92,6 +92,7 @@ class Agent : public Magnum::SceneGraph::AbstractFeature3D {
   scene::SceneNode& node() { return object(); }
   const scene::SceneNode& node() const { return object(); }
 
+  #if 0
   // Overloads to avoid confusion
   scene::SceneNode& object() {
     return static_cast<scene::SceneNode&>(
@@ -101,6 +102,9 @@ class Agent : public Magnum::SceneGraph::AbstractFeature3D {
     return static_cast<const scene::SceneNode&>(
         Magnum::SceneGraph::AbstractFeature3D::object());
   }
+  #endif
+  scene::SceneNode& object() { return *agentNode_; }
+  const scene::SceneNode& object() const { return *agentNode_; }
 
   bool act(const std::string& actionName);
 
@@ -137,6 +141,7 @@ class Agent : public Magnum::SceneGraph::AbstractFeature3D {
   sensor::SensorSuite sensors_;
   scene::ObjectControls::ptr controls_;
   AgentState initialState_;
+  scene::SceneNode* agentNode_;
 
   ESP_SMART_POINTERS(Agent)
 };

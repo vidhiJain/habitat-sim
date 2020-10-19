@@ -67,11 +67,11 @@ enum class MotionType {
 
 };
 
-class RigidBase : public Magnum::SceneGraph::AbstractFeature3D {
+class RigidBase {
  public:
   RigidBase(scene::SceneNode* rigidBodyNode)
-      : Magnum::SceneGraph::AbstractFeature3D(*rigidBodyNode),
-        visualNode_(&rigidBodyNode->createChild()) {}
+      : rigidBodyNode_(rigidBodyNode)
+      , visualNode_(&rigidBodyNode->createChild()) {}
 
   /**
    * @brief Virtual destructor for a @ref RigidBase.
@@ -84,6 +84,7 @@ class RigidBase : public Magnum::SceneGraph::AbstractFeature3D {
   scene::SceneNode& node() { return object(); }
   const scene::SceneNode& node() const { return object(); }
 
+  #if 0
   // Overloads to avoid confusion
   scene::SceneNode& object() {
     return static_cast<scene::SceneNode&>(
@@ -93,6 +94,10 @@ class RigidBase : public Magnum::SceneGraph::AbstractFeature3D {
     return static_cast<const scene::SceneNode&>(
         Magnum::SceneGraph::AbstractFeature3D::object());
   }
+  #endif
+  scene::SceneNode& object() { return *rigidBodyNode_; }
+  const scene::SceneNode& object() const { return *rigidBodyNode_; }
+
   /**
    * @brief Initializes the @ref RigidObject or @ref RigidStage that inherits
    * from this class.  This is overridden
@@ -616,7 +621,9 @@ class RigidBase : public Magnum::SceneGraph::AbstractFeature3D {
    * Note that the transformation of this node is a composition of rotation and
    * translation as scaling is applied to a child of this node.
    */
-  scene::SceneNode* visualNode_ = nullptr;
+  scene::SceneNode* visualNode_ = nullptr; // child of rigidBodyNode_, no siblings
+
+  scene::SceneNode* rigidBodyNode_ = nullptr; // parent of visualNode_
 
   //! all nodes created when this object's render asset was added to the
   //! SceneGraph
