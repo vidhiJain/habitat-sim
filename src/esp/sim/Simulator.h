@@ -813,7 +813,8 @@ class Simulator {
   int findNearestObjectUnderCrosshair(Magnum::Vector3 point,
                                       Magnum::Vector3 refPoint,
                                       const Magnum::Vector2i& viewSize,
-                                      float distance = 1.0);
+                                      float distance = 1.0,
+                                      bool isAction = false);
 
   esp::geo::Ray unproject(const Magnum::Vector2i& crossHairPosition);
 
@@ -844,6 +845,18 @@ class Simulator {
                            const int sceneID = 0);
 
   void enableDebugDraw();
+
+  int getPhysicsNumActiveContactPoints() {
+    return physicsManager_->getNumActiveContactPoints();
+  }
+
+  int getPhysicsNumActiveOverlappingPairs() {
+    return physicsManager_->getNumActiveOverlappingPairs();
+  }
+
+  std::string getPhysicsStepCollisionSummary() {
+    return physicsManager_->getStepCollisionSummary();
+  }
 
   /**
    * @brief Getter for PRNG.
