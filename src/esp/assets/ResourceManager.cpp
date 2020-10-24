@@ -1092,14 +1092,8 @@ bool ResourceManager::loadGeneralMeshData(
   std::vector<scene::SceneNode*> visNodeCache;
   std::vector<StaticDrawableInfo> staticDrawableInfo;
 
-  addComponent(meshMetaData,       // mesh metadata
-               newNode,            // parent scene node
-               lightSetupKey,      // lightSetup key
-               drawables,          // drawble group
-               meshMetaData.root,  // mesh transform node
-               visNodeCache,       // a vector of scene nodes, the visNodeCache
-               computeAbsoluteAABBs,  // compute absolute aabbs
-               staticDrawableInfo);   // a vector of static drawable info
+  addRenderAssetInstance(filename, Cr::Containers::NullOpt, &newNode, drawables,
+                         visNodeCache, lightSetupKey, staticDrawableInfo);
 
   if (computeAbsoluteAABBs) {
     // now compute aabbs by constructed staticDrawableInfo
@@ -1616,6 +1610,58 @@ bool ResourceManager::instantiateAssetsOnDemand(
   return true;
 }  // ResourceManager::instantiateAssetsOnDemand
 
+// This is similar to addObjectToDrawables, but a render asset instance is more
+// general than an object. Examples of render asset instances that aren't
+// objects:
+// - links in an articulated object
+// - stage's RGB render asset instance and semantic render asset instance
+// - an "UI overlay" element like a 3D arrow (not part of the simulation)
+// Notice this method doesn't take an object template handle.
+// In the articulation branch, ResourceManager::attachAsset should be adapted to
+// use this.
+void ResourceManager::addRenderAssetInstance(
+    const std::string& renderAssetHandle,
+    const Cr::Containers::Optional<Magnum::Vector3>& scaleOpt,
+    scene::SceneNode* parent,
+    DrawableGroup* drawables,
+    std::vector<scene::SceneNode*>& visNodeCache,
+    const Magnum::ResourceKey& lightSetupKey,
+    std::vector<StaticDrawableInfo>& staticDrawableInfo) {
+  ASSERT(parent);
+  ASSERT(drawables);
+
+  CHECK(resourceDict_.count(renderAssetHandle));
+  const LoadedAssetData& loadedAssetData = resourceDict_.at(renderAssetHandle);
+  // this warning is more generic than addObjectToDrawables
+  if (!isLightSetupCompatible(loadedAssetData, lightSetupKey)) {
+    LOG(WARNING)
+        << "Instantiating render asset " << renderAssetHandle
+        << " with incompatible light setup, instance will not be correctly lit."
+           "For objects, please ensure 'requires lighting' is enabled in "
+           "object config file.";
+  }
+
+  scene::SceneNode& newNode = parent->createChild();
+  if (scaleOpt) {
+    // need a new node for scaling because motion state will override scale
+    // set at the physical node
+    // perf todo: avoid this if unit scale
+    newNode.setScaling(*scaleOpt);
+
+    // legacy quirky behavior: only add this node to viscache if using scaling
+    visNodeCache.push_back(&newNode);
+  }
+
+  addComponent(loadedAssetData.meshMetaData,       // mesh metadata
+               newNode,                            // parent scene node
+               lightSetupKey,                      // lightSetup key
+               drawables,                          // drawable group
+               loadedAssetData.meshMetaData.root,  // mesh transform node
+               visNodeCache,  // a vector of scene nodes, the visNodeCache
+               false,         // compute absolute AABBs
+               staticDrawableInfo);  // a vector of static drawable info
+}
+
 void ResourceManager::addObjectToDrawables(
     const std::string& objTemplateHandle,
     scene::SceneNode* parent,
@@ -1632,32 +1678,13 @@ void ResourceManager::addObjectToDrawables(
     const std::string& renderObjectName =
         ObjectAttributes->getRenderAssetHandle();
 
-    const LoadedAssetData& loadedAssetData = resourceDict_.at(renderObjectName);
-    if (!isLightSetupCompatible(loadedAssetData, lightSetupKey)) {
-      LOG(WARNING) << "Instantiating object with incompatible light setup, "
-                      "object will not be correctly lit. If you need lighting "
-                      "please ensure 'requires lighting' is enabled in object "
-                      "config file";
-    }
-
-    // need a new node for scaling because motion state will override scale
-    // set at the physical node
-    scene::SceneNode& scalingNode = parent->createChild();
-    visNodeCache.push_back(&scalingNode);
-    Magnum::Vector3 objectScaling = ObjectAttributes->getScale();
-    scalingNode.setScaling(objectScaling);
     // ignored for objects since computeAbsoluteAABBs is always set to false
     // after scene is loaded.
     std::vector<StaticDrawableInfo> staticDrawableInfo;
 
-    addComponent(loadedAssetData.meshMetaData,       // mesh metadata
-                 scalingNode,                        // parent scene node
-                 lightSetupKey,                      // lightSetup key
-                 drawables,                          // drawable group
-                 loadedAssetData.meshMetaData.root,  // mesh transform node
-                 visNodeCache,  // a vector of scene nodes, the visNodeCache
-                 false,         // compute absolute AABBs
-                 staticDrawableInfo);  // a vector of static drawable info
+    addRenderAssetInstance(renderObjectName, ObjectAttributes->getScale(),
+                           parent, drawables, visNodeCache, lightSetupKey,
+                           staticDrawableInfo);
 
     // set the node type for all cached visual nodes
     for (auto node : visNodeCache) {

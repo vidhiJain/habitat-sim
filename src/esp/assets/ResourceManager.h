@@ -633,6 +633,15 @@ class ResourceManager {
       const Mn::Trade::PbrMetallicRoughnessMaterialData& material,
       int textureBaseIndex);
 
+  void addRenderAssetInstance(
+      const std::string& renderAssetHandle,
+      const Cr::Containers::Optional<Magnum::Vector3>& scale,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables,
+      std::vector<scene::SceneNode*>& visNodeCache,
+      const Magnum::ResourceKey& lightSetupKey,
+      std::vector<StaticDrawableInfo>& staticDrawableInfo);
+
   /**
    * @brief Load a mesh describing some scene asset based on the passed
    * assetInfo.
