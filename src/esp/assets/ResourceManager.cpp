@@ -917,15 +917,9 @@ bool ResourceManager::loadInstanceMeshData(
   return true;
 }
 
-bool ResourceManager::loadGeneralMeshData(
-    const AssetInfo& info,
-    scene::SceneNode* parent /* = nullptr */,
-    DrawableGroup* drawables /* = nullptr */,
-    bool computeAbsoluteAABBs, /* = false */
-    const Mn::ResourceKey& lightSetupKey) {
+bool ResourceManager::loadRenderAsset(const AssetInfo& info) {
   const std::string& filename = info.filepath;
-  const bool fileIsLoaded = resourceDict_.count(filename) > 0;
-  const bool drawData = parent != nullptr && drawables != nullptr;
+  CHECK(resourceDict_.count(filename) == 0);
 
   // Preferred plugins, Basis target GPU format
   importerManager_.setPreferredPlugins("GltfImporter", {"TinyGltfImporter"});
@@ -1006,50 +1000,65 @@ bool ResourceManager::loadGeneralMeshData(
 #endif
   }
 
+  if (!fileImporter_->openFile(filename)) {
+    LOG(ERROR) << "Cannot open file " << filename;
+    return false;
+  }
+
+  // load file and add it to the dictionary
+  LoadedAssetData loadedAssetData{info};
+  if (requiresTextures_) {
+    loadTextures(*fileImporter_, loadedAssetData);
+    loadMaterials(*fileImporter_, loadedAssetData);
+  }
+  loadMeshes(*fileImporter_, loadedAssetData);
+  auto inserted = resourceDict_.emplace(filename, std::move(loadedAssetData));
+  MeshMetaData& meshMetaData = inserted.first->second.meshMetaData;
+
+  // Register magnum mesh
+  if (fileImporter_->defaultScene() != -1) {
+    Cr::Containers::Optional<Magnum::Trade::SceneData> sceneData =
+        fileImporter_->scene(fileImporter_->defaultScene());
+    if (!sceneData) {
+      LOG(ERROR) << "Cannot load scene, exiting";
+      return false;
+    }
+    for (unsigned int sceneDataID : sceneData->children3D()) {
+      loadMeshHierarchy(*fileImporter_, meshMetaData.root, sceneDataID);
+    }
+  } else if (fileImporter_->meshCount() &&
+             meshes_[meshMetaData.meshIndex.first]) {
+    // no default scene --- standalone OBJ/PLY files, for example
+    // take a wild guess and load the first mesh with the first material
+    // addMeshToDrawables(metaData, *parent, drawables, 0, 0);
+    loadMeshHierarchy(*fileImporter_, meshMetaData.root, 0);
+  } else {
+    LOG(ERROR) << "No default scene available and no meshes found, exiting";
+    return false;
+  }
+
+  const quatf transform = info.frame.rotationFrameToWorld();
+  Magnum::Matrix4 R = Magnum::Matrix4::from(
+      Magnum::Quaternion(transform).toMatrix(), Magnum::Vector3());
+  meshMetaData.root.transformFromLocalToParent =
+      R * meshMetaData.root.transformFromLocalToParent;
+
+  return true;
+}
+
+bool ResourceManager::loadGeneralMeshData(
+    const AssetInfo& info,
+    scene::SceneNode* parent /* = nullptr */,
+    DrawableGroup* drawables /* = nullptr */,
+    bool computeAbsoluteAABBs, /* = false */
+    const Mn::ResourceKey& lightSetupKey) {
+  const std::string& filename = info.filepath;
+  const bool fileIsLoaded = resourceDict_.count(filename) > 0;
   // Optional File loading
   if (!fileIsLoaded) {
-    if (!fileImporter_->openFile(filename)) {
-      LOG(ERROR) << "Cannot open file " << filename;
+    if (!loadRenderAsset(info)) {
       return false;
     }
-
-    // if this is a new file, load it and add it to the dictionary
-    LoadedAssetData loadedAssetData{info};
-    if (requiresTextures_) {
-      loadTextures(*fileImporter_, loadedAssetData);
-      loadMaterials(*fileImporter_, loadedAssetData);
-    }
-    loadMeshes(*fileImporter_, loadedAssetData);
-    auto inserted = resourceDict_.emplace(filename, std::move(loadedAssetData));
-    MeshMetaData& meshMetaData = inserted.first->second.meshMetaData;
-
-    // Register magnum mesh
-    if (fileImporter_->defaultScene() != -1) {
-      Cr::Containers::Optional<Magnum::Trade::SceneData> sceneData =
-          fileImporter_->scene(fileImporter_->defaultScene());
-      if (!sceneData) {
-        LOG(ERROR) << "Cannot load scene, exiting";
-        return false;
-      }
-      for (unsigned int sceneDataID : sceneData->children3D()) {
-        loadMeshHierarchy(*fileImporter_, meshMetaData.root, sceneDataID);
-      }
-    } else if (fileImporter_->meshCount() &&
-               meshes_[meshMetaData.meshIndex.first]) {
-      // no default scene --- standalone OBJ/PLY files, for example
-      // take a wild guess and load the first mesh with the first material
-      // addMeshToDrawables(metaData, *parent, drawables, 0, 0);
-      loadMeshHierarchy(*fileImporter_, meshMetaData.root, 0);
-    } else {
-      LOG(ERROR) << "No default scene available and no meshes found, exiting";
-      return false;
-    }
-
-    const quatf transform = info.frame.rotationFrameToWorld();
-    Magnum::Matrix4 R = Magnum::Matrix4::from(
-        Magnum::Quaternion(transform).toMatrix(), Magnum::Vector3());
-    meshMetaData.root.transformFromLocalToParent =
-        R * meshMetaData.root.transformFromLocalToParent;
   } else if (resourceDict_[filename].assetInfo != info) {
     // Right now, we only allow for an asset to be loaded with one
     // configuration, since generated mesh data may be invalid for a new
@@ -1058,6 +1067,8 @@ bool ResourceManager::loadGeneralMeshData(
                << " with different configuration not currently supported. "
                << "Asset may not be rendered correctly.";
   }
+
+  const bool drawData = parent != nullptr && drawables != nullptr;
 
   // Optional Instantiation
   if (!drawData) {

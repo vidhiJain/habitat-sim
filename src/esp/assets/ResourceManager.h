@@ -730,6 +730,8 @@ class ResourceManager {
                             bool computeAbsoluteAABBs,
                             bool splitSemanticMesh);  // was default true
 
+  bool loadRenderAsset(const AssetInfo& info);
+
   /**
    * @brief Load a mesh (e.g. gltf) into assets from a file.
    *
