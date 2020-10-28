@@ -38,6 +38,7 @@
 #include "esp/gfx/GenericDrawable.h"
 #include "esp/gfx/MaterialUtil.h"
 #include "esp/gfx/PbrDrawable.h"
+#include "esp/gfx/RenderKeyframe.h"
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
@@ -1630,6 +1631,7 @@ bool ResourceManager::instantiateAssetsOnDemand(
 // Notice this method doesn't take an object template handle.
 // In the articulation branch, ResourceManager::attachAsset should be adapted to
 // use this.
+// todo: rename from "add" to create or new
 void ResourceManager::addRenderAssetInstance(
     const std::string& renderAssetHandle,
     const Cr::Containers::Optional<Magnum::Vector3>& scaleOpt,
@@ -1671,6 +1673,32 @@ void ResourceManager::addRenderAssetInstance(
                visNodeCache,  // a vector of scene nodes, the visNodeCache
                false,         // compute absolute AABBs
                staticDrawableInfo);  // a vector of static drawable info
+
+  if (renderKeyframeWriter_) {
+    // todo: hook these up correctly
+    bool isSemantic = true;
+    bool isRGBD = true;
+    renderKeyframeWriter_->onCreateRenderAssetInstance(
+        &newNode, loadedAssetData.assetInfo, isSemantic, isRGBD, lightSetupKey);
+  }
+
+// todo: set nodeType to OBJECT or EMPTY
+
+// temp reference code
+#if 0
+  {
+    std::vector<std::reference_wrapper<MagnumObject>> objects;
+    objects.push_back(newNode);
+    //Magnum::Matrix4 worldMatrix{Magnum::IdentityInit};
+
+    // basic assumption is that all the drawables are in the same scene;
+    // so use the 1st element in the vector to obtain this scene
+    auto* scene = dynamic_cast<MagnumScene*>(staticDrawableInfo[0].node.scene());
+
+    std::vector<Magnum::Matrix4> transformations =
+      scene->transformationMatrices(objects);
+  }
+#endif
 }
 
 void ResourceManager::addObjectToDrawables(

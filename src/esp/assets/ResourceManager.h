@@ -55,7 +55,8 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 class Drawable;
-}
+class RenderKeyframeWriter;
+}  // namespace gfx
 namespace scene {
 struct SceneConfiguration;
 }
@@ -445,6 +446,11 @@ class ResourceManager {
    * for rendering. Textures will not be loaded if this is false.
    */
   inline void setRequiresTextures(bool newVal) { requiresTextures_ = newVal; }
+
+  void setRenderKeyframeWriter(
+      const std::shared_ptr<gfx::RenderKeyframeWriter>& renderKeyframeWriter) {
+    renderKeyframeWriter_ = renderKeyframeWriter;
+  }
 
  private:
   /**
@@ -949,6 +955,8 @@ class ResourceManager {
    * @brief Flag to load textures of meshes
    */
   bool requiresTextures_ = true;
+
+  std::shared_ptr<gfx::RenderKeyframeWriter> renderKeyframeWriter_;
 };
 
 CORRADE_ENUMSET_OPERATORS(ResourceManager::Flags)

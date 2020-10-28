@@ -13,6 +13,8 @@
 namespace esp {
 namespace gfx {
 
+class RenderKeyframeWriter;
+
 class Renderer {
  public:
   enum class Flag {
@@ -41,6 +43,9 @@ class Renderer {
    * @brief Binds a @ref RenderTarget to the sensor
    */
   void bindRenderTarget(sensor::VisualSensor& sensor);
+
+  void setRenderKeyframeWriter(
+      const std::shared_ptr<RenderKeyframeWriter>& renderKeyframeWriter);
 
   // draw the scene graph with the default camera in scene graph
   // user needs to set the default camera so that it has correct

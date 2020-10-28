@@ -15,6 +15,7 @@
 #include "esp/core/esp.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/RenderCamera.h"
+#include "esp/gfx/RenderKeyframe.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/io/io.h"
 #include "esp/metadata/attributes/AttributesBase.h"
@@ -181,6 +182,10 @@ void Simulator::reconfigure(const SimulatorConfiguration& cfg) {
         flags |= gfx::Renderer::Flag::NoTextures;
       renderer_ = gfx::Renderer::create(flags);
     }
+
+    renderKeyframeWriter_ = std::make_shared<gfx::RenderKeyframeWriter>();
+    renderer_->setRenderKeyframeWriter(renderKeyframeWriter_);
+    resourceManager_->setRenderKeyframeWriter(renderKeyframeWriter_);
 
     auto& sceneGraph = sceneManager_->getSceneGraph(activeSceneID_);
     auto& rootNode = sceneGraph.getRootNode();

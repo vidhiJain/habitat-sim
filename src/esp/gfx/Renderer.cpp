@@ -18,6 +18,7 @@
 #include <Magnum/PixelFormat.h>
 
 #include "esp/gfx/DepthUnprojection.h"
+#include "esp/gfx/RenderKeyframe.h"
 #include "esp/gfx/RenderTarget.h"
 #include "esp/gfx/magnum.h"
 
@@ -53,6 +54,10 @@ struct Renderer::Impl {
     sceneGraph.setDefaultRenderCamera(visualSensor);
 
     draw(sceneGraph.getDefaultRenderCamera(), sceneGraph, flags);
+
+    if (renderKeyframeWriter_) {
+      renderKeyframeWriter_->onDrawObservation(visualSensor);
+    }
   }
 
   void bindRenderTarget(sensor::VisualSensor& sensor) {
@@ -72,9 +77,15 @@ struct Renderer::Impl {
         flags_));
   }
 
+  void setRenderKeyframeWriter(
+      const std::shared_ptr<RenderKeyframeWriter>& renderKeyframeWriter) {
+    renderKeyframeWriter_ = renderKeyframeWriter;
+  }
+
  private:
   std::unique_ptr<DepthShader> depthShader_;
   const Flags flags_;
+  std::shared_ptr<RenderKeyframeWriter> renderKeyframeWriter_;
 };
 
 Renderer::Renderer(Flags flags)
@@ -94,6 +105,11 @@ void Renderer::draw(sensor::VisualSensor& visualSensor,
 
 void Renderer::bindRenderTarget(sensor::VisualSensor& sensor) {
   pimpl_->bindRenderTarget(sensor);
+}
+
+void Renderer::setRenderKeyframeWriter(
+    const std::shared_ptr<RenderKeyframeWriter>& renderKeyframeWriter) {
+  pimpl_->setRenderKeyframeWriter(renderKeyframeWriter);
 }
 
 }  // namespace gfx

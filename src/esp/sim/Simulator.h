@@ -33,6 +33,7 @@ class SemanticScene;
 }  // namespace scene
 namespace gfx {
 class Renderer;
+class RenderKeyframeWriter;
 }  // namespace gfx
 }  // namespace esp
 
@@ -719,6 +720,8 @@ class Simulator {
   std::shared_ptr<scene::SemanticScene> semanticScene_ = nullptr;
 
   std::shared_ptr<physics::PhysicsManager> physicsManager_ = nullptr;
+
+  std::shared_ptr<gfx::RenderKeyframeWriter> renderKeyframeWriter_;
 
   core::Random::ptr random_;
   SimulatorConfiguration config_;
