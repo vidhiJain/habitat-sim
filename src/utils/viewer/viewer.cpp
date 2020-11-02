@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <ctime>
+#include <functional>
 
 #include <Magnum/configure.h>
 #include <Magnum/ImGuiIntegration/Context.hpp>
@@ -24,6 +25,7 @@
 #include <Magnum/Shaders/Shaders.h>
 
 #include "esp/gfx/RenderCamera.h"
+#include "esp/gfx/RenderKeyframeReader.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/nav/PathFinder.h"
 #include "esp/scene/ObjectControls.h"
@@ -50,6 +52,9 @@
 
 #include "ObjectPickingHelper.h"
 #include "esp/physics/configure.h"
+
+#include <chrono>
+#include <thread>
 
 constexpr float moveSensitivity = 0.1f;
 constexpr float lookSensitivity = 11.25f;
@@ -211,6 +216,8 @@ Key Commands:
   std::unique_ptr<ObjectPickingHelper> objectPickingHelper_;
   // returns the number of visible drawables (meshVisualizer drawables are not
   // included)
+
+  std::unique_ptr<esp::gfx::RenderKeyframeReader> renderKeyframeReader_;
 };
 
 Viewer::Viewer(const Arguments& arguments)
@@ -377,6 +384,12 @@ Viewer::Viewer(const Arguments& arguments)
   agentBodyNode_ = &defaultAgent_->node();
 
   objectPickingHelper_ = std::make_unique<ObjectPickingHelper>(viewportSize);
+
+  renderKeyframeReader_ =
+      std::make_unique<esp::gfx::RenderKeyframeReader>(std::bind(
+          &esp::sim::Simulator::loadAndAddRenderAssetInstance, simulator_.get(),
+          std::placeholders::_1, std::placeholders::_2));
+
   timeline_.start();
 
   printHelpText();
@@ -593,6 +606,9 @@ void Viewer::drawEvent() {
   Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::FaceCulling);
   Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::ScissorTest);
   Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::Blending);
+
+  // temp
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
   swapBuffers();
   timeline_.nextFrame();
@@ -821,6 +837,19 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::H:
       printHelpText();
       break;
+    case KeyEvent::Key::M:
+      renderKeyframeReader_->readKeyframesFromFile("my_replay_simple.json");
+      break;
+    case KeyEvent::Key::Comma:
+      renderKeyframeReader_->setFrame(
+          std::min(renderKeyframeReader_->getFrameIndex() + 1,
+                   renderKeyframeReader_->getNumFrames() - 1));
+      break;
+    case KeyEvent::Key::Period:
+      renderKeyframeReader_->setFrame(
+          std::max(renderKeyframeReader_->getFrameIndex() - 1, 0));
+      break;
+
     default:
       break;
   }

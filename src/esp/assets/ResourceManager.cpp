@@ -38,7 +38,7 @@
 #include "esp/gfx/GenericDrawable.h"
 #include "esp/gfx/MaterialUtil.h"
 #include "esp/gfx/PbrDrawable.h"
-#include "esp/gfx/RenderKeyframe.h"
+#include "esp/gfx/RenderKeyframeWriter.h"
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
@@ -1044,6 +1044,10 @@ bool ResourceManager::loadRenderAsset(const AssetInfo& info) {
   meshMetaData.root.transformFromLocalToParent =
       R * meshMetaData.root.transformFromLocalToParent;
 
+  if (renderKeyframeWriter_) {
+    renderKeyframeWriter_->onLoadRenderAsset(info);
+  }
+
   return true;
 }
 
@@ -1102,15 +1106,30 @@ bool ResourceManager::loadGeneralMeshData(
   }  // forceReload
      // TODO: cache visual nodes added by this process
   std::vector<scene::SceneNode*> visNodeCache;
-  std::vector<StaticDrawableInfo> staticDrawableInfo;
 
-  addRenderAssetInstance(filename, Cr::Containers::NullOpt, &newNode, drawables,
-                         visNodeCache, lightSetupKey, staticDrawableInfo);
+  RenderAssetInstanceCreation creation;
+  creation.renderAssetHandle = filename;
+  creation.scale = Cr::Containers::NullOpt;
+  creation.lightSetupKey = lightSetupKey;
+  creation.isRGBD = true;
+  creation.isSemantic = true;
+  creation.isStatic = computeAbsoluteAABBs;
+  // addRenderAssetInstance(
+  //     RenderAssetInstanceCreation{
+  //       .renderAssetHandle = filename,
+  //       .scale = Cr::Containers::NullOpt,
+  //       .lightSetupKey = lightSetupKey,
+  //       .isRGBD = true, // todo: hook up correctly
+  //       .isSemantic = true, // todo: hook up correctly
+  //       .isStatic = computeAbsoluteAABBs}, // todo: figure out if any case
+  //       where this codepath is for non-static
+  //     &newNode, // todo: check if we're getting an extra node here
+  //     drawables, visNodeCache);
 
-  if (computeAbsoluteAABBs) {
-    // now compute aabbs by constructed staticDrawableInfo
-    computeGeneralMeshAbsoluteAABBs(staticDrawableInfo);
-  }
+  addRenderAssetInstance(
+      creation,
+      &newNode,  // todo: check if we're getting an extra node here
+      drawables, visNodeCache);
 
   return true;
 }  // loadGeneralMeshData
@@ -1622,6 +1641,51 @@ bool ResourceManager::instantiateAssetsOnDemand(
   return true;
 }  // ResourceManager::instantiateAssetsOnDemand
 
+scene::SceneNode* ResourceManager::loadAndAddRenderAssetInstance(
+    const AssetInfo& assetInfo,
+    const RenderAssetInstanceCreation& creation,
+    esp::scene::SceneManager* sceneManagerPtr,
+    const std::vector<int>& activeSceneIDs) {
+  // The mapping of of isStatic, isSemantic, isRGBD to scene graph is messy and
+  // hopefully temporary.
+  int sceneID = -1;
+  if (!creation.isStatic) {
+    // non-static instances must always get added to the RGBD scene graph, with
+    // nodeType==OBJECT, and they will be drawn for both RGBD and Semantic
+    // sensors.
+    ASSERT(creation.isSemantic && creation.isRGBD);
+    sceneID = activeSceneIDs[0];
+  } else {
+    if (creation.isSemantic && creation.isRGBD) {
+      // rather than failing the assert here, we could add the instance to both
+      // scene graphs
+      ASSERT(activeSceneIDs[1] == activeSceneIDs[0]);
+      sceneID = activeSceneIDs[0];
+    } else {
+      // the problem here is that a semantic scene graph wasn't constructed, so
+      // we can't support a semantic-only instance
+      ASSERT(activeSceneIDs[1] != activeSceneIDs[0]);
+      sceneID = creation.isSemantic ? activeSceneIDs[1] : activeSceneIDs[0];
+    }
+  }
+
+  auto& sceneGraph = sceneManagerPtr->getSceneGraph(sceneID);
+  auto& rootNode = sceneGraph.getRootNode();
+  auto& drawables = sceneGraph.getDrawables();
+
+  const bool fileIsLoaded = resourceDict_.count(assetInfo.filepath) > 0;
+  if (!fileIsLoaded) {
+    if (!loadRenderAsset(assetInfo)) {
+      return nullptr;
+    }
+  }
+
+  std::vector<scene::SceneNode*> dummyVisNodeCache;
+  ASSERT(assetInfo.filepath == creation.renderAssetHandle);
+  return addRenderAssetInstance(creation, &rootNode, &drawables,
+                                dummyVisNodeCache);
+}
+
 // This is similar to addObjectToDrawables, but a render asset instance is more
 // general than an object. Examples of render asset instances that aren't
 // objects:
@@ -1632,58 +1696,67 @@ bool ResourceManager::instantiateAssetsOnDemand(
 // In the articulation branch, ResourceManager::attachAsset should be adapted to
 // use this.
 // todo: rename from "add" to create or new
-void ResourceManager::addRenderAssetInstance(
-    const std::string& renderAssetHandle,
-    const Cr::Containers::Optional<Magnum::Vector3>& scaleOpt,
+scene::SceneNode* ResourceManager::addRenderAssetInstance(
+    const RenderAssetInstanceCreation& creation,
     scene::SceneNode* parent,
     DrawableGroup* drawables,
-    std::vector<scene::SceneNode*>& visNodeCache,
-    const Magnum::ResourceKey& lightSetupKey,
-    std::vector<StaticDrawableInfo>& staticDrawableInfo) {
+    std::vector<scene::SceneNode*>& visNodeCache) {
   ASSERT(parent);
   ASSERT(drawables);
 
-  CHECK(resourceDict_.count(renderAssetHandle));
-  const LoadedAssetData& loadedAssetData = resourceDict_.at(renderAssetHandle);
+  CHECK(resourceDict_.count(creation.renderAssetHandle));
+  const LoadedAssetData& loadedAssetData =
+      resourceDict_.at(creation.renderAssetHandle);
   // this warning is more generic than addObjectToDrawables
-  if (!isLightSetupCompatible(loadedAssetData, lightSetupKey)) {
+  if (!isLightSetupCompatible(loadedAssetData, creation.lightSetupKey)) {
     LOG(WARNING)
-        << "Instantiating render asset " << renderAssetHandle
+        << "Instantiating render asset " << creation.renderAssetHandle
         << " with incompatible light setup, instance will not be correctly lit."
            "For objects, please ensure 'requires lighting' is enabled in "
            "object config file.";
   }
 
   scene::SceneNode& newNode = parent->createChild();
-  if (scaleOpt) {
+  if (creation.scale) {
     // need a new node for scaling because motion state will override scale
     // set at the physical node
     // perf todo: avoid this if unit scale
-    newNode.setScaling(*scaleOpt);
+    newNode.setScaling(*creation.scale);
 
     // legacy quirky behavior: only add this node to viscache if using scaling
     visNodeCache.push_back(&newNode);
   }
 
+  std::vector<StaticDrawableInfo> staticDrawableInfo;
+
+  auto nodeType = (creation.isStatic) ? scene::SceneNodeType::EMPTY
+                                      : scene::SceneNodeType::OBJECT;
+  bool computeAbsoluteAABBs = creation.isStatic;
+
   addComponent(loadedAssetData.meshMetaData,       // mesh metadata
                newNode,                            // parent scene node
-               lightSetupKey,                      // lightSetup key
+               creation.lightSetupKey,             // lightSetup key
                drawables,                          // drawable group
                loadedAssetData.meshMetaData.root,  // mesh transform node
                visNodeCache,  // a vector of scene nodes, the visNodeCache
-               false,         // compute absolute AABBs
+               computeAbsoluteAABBs,         // compute absolute AABBs
                staticDrawableInfo);  // a vector of static drawable info
 
   if (renderKeyframeWriter_) {
-    // todo: hook these up correctly
-    bool isSemantic = true;
-    bool isRGBD = true;
-    renderKeyframeWriter_->onCreateRenderAssetInstance(
-        &newNode, loadedAssetData.assetInfo, isSemantic, isRGBD, lightSetupKey);
+    renderKeyframeWriter_->onCreateRenderAssetInstance(&newNode, creation);
   }
 
-// todo: set nodeType to OBJECT or EMPTY
+  if (computeAbsoluteAABBs) {
+    // now compute aabbs by constructed staticDrawableInfo
+    computeGeneralMeshAbsoluteAABBs(staticDrawableInfo);
+  }
 
+  // set the node type for all cached visual nodes
+  for (auto node : visNodeCache) {
+    node->setType(nodeType);
+  }
+
+  return &newNode;
 // temp reference code
 #if 0
   {
@@ -1721,14 +1794,26 @@ void ResourceManager::addObjectToDrawables(
     // after scene is loaded.
     std::vector<StaticDrawableInfo> staticDrawableInfo;
 
-    addRenderAssetInstance(renderObjectName, ObjectAttributes->getScale(),
-                           parent, drawables, visNodeCache, lightSetupKey,
-                           staticDrawableInfo);
+    RenderAssetInstanceCreation creation;
+    creation.renderAssetHandle = renderObjectName;
+    creation.scale = ObjectAttributes->getScale();
+    creation.lightSetupKey = lightSetupKey;
+    creation.isRGBD = true;
+    creation.isSemantic = true;
+    creation.isStatic = false;
 
-    // set the node type for all cached visual nodes
-    for (auto node : visNodeCache) {
-      node->setType(scene::SceneNodeType::OBJECT);
-    }
+    addRenderAssetInstance(creation, parent, drawables, visNodeCache);
+
+    // addRenderAssetInstance(
+    //     RenderAssetInstanceCreation{
+    //       .renderAssetHandle = renderObjectName,
+    //       .scale = ObjectAttributes->getScale(),
+    //       .lightSetupKey = lightSetupKey,
+    //       .isRGBD = true,
+    //       .isSemantic = true,
+    //       .isStatic = false},
+    //     parent, drawables, visNodeCache);
+
   }  // should always be specified, otherwise won't do anything
 }  // addObjectToDrawables
 

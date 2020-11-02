@@ -18,7 +18,7 @@
 #include <Magnum/PixelFormat.h>
 
 #include "esp/gfx/DepthUnprojection.h"
-#include "esp/gfx/RenderKeyframe.h"
+#include "esp/gfx/RenderKeyframeWriter.h"
 #include "esp/gfx/RenderTarget.h"
 #include "esp/gfx/magnum.h"
 

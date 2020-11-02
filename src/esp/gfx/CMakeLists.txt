@@ -24,6 +24,10 @@ set(
   WindowlessContext.h
   RenderKeyframe.h
   RenderKeyframe.cpp
+  RenderKeyframeReader.h
+  RenderKeyframeReader.cpp
+  RenderKeyframeWriter.h
+  RenderKeyframeWriter.cpp
   RenderTarget.cpp
   RenderTarget.h
   ShaderManager.cpp

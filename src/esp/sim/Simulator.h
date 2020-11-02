@@ -35,6 +35,9 @@ namespace gfx {
 class Renderer;
 class RenderKeyframeWriter;
 }  // namespace gfx
+namespace assets {
+struct RenderAssetInstanceCreation;
+}
 }  // namespace esp
 
 namespace esp {
@@ -685,6 +688,10 @@ class Simulator {
   void setMetadataMediator(metadata::MetadataMediator::ptr _metadataMediator) {
     metadataMediator_ = _metadataMediator;
   }
+
+  scene::SceneNode* loadAndAddRenderAssetInstance(
+      const assets::AssetInfo& assetInfo,
+      const assets::RenderAssetInstanceCreation& creation);
 
  protected:
   Simulator(){};

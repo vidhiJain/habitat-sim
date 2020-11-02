@@ -30,6 +30,7 @@
 #include "GenericMeshData.h"
 #include "MeshData.h"
 #include "MeshMetaData.h"
+#include "RenderAssetInstanceCreation.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/DrawableGroup.h"
 #include "esp/gfx/MaterialData.h"
@@ -452,7 +453,22 @@ class ResourceManager {
     renderKeyframeWriter_ = renderKeyframeWriter;
   }
 
+  // returns nullptr if load failure
+  scene::SceneNode* loadAndAddRenderAssetInstance(
+      const AssetInfo& assetInfo,
+      const RenderAssetInstanceCreation& creation,
+      esp::scene::SceneManager* sceneManagerPtr,
+      const std::vector<int>& activeSceneIDs);
+
  private:
+  scene::SceneNode* addRenderAssetInstance(
+      const RenderAssetInstanceCreation& creation,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables,
+      std::vector<scene::SceneNode*>& visNodeCache);
+
+  bool loadRenderAsset(const AssetInfo& info);
+
   /**
    * @brief Load the requested mesh info into @ref meshInfo corresponding to
    * specified @ref meshType used by @ref objectTemplateHandle
@@ -639,15 +655,6 @@ class ResourceManager {
       const Mn::Trade::PbrMetallicRoughnessMaterialData& material,
       int textureBaseIndex);
 
-  void addRenderAssetInstance(
-      const std::string& renderAssetHandle,
-      const Cr::Containers::Optional<Magnum::Vector3>& scale,
-      scene::SceneNode* parent,
-      DrawableGroup* drawables,
-      std::vector<scene::SceneNode*>& visNodeCache,
-      const Magnum::ResourceKey& lightSetupKey,
-      std::vector<StaticDrawableInfo>& staticDrawableInfo);
-
   /**
    * @brief Load a mesh describing some scene asset based on the passed
    * assetInfo.
@@ -735,8 +742,6 @@ class ResourceManager {
                             DrawableGroup* drawables,
                             bool computeAbsoluteAABBs,
                             bool splitSemanticMesh);  // was default true
-
-  bool loadRenderAsset(const AssetInfo& info);
 
   /**
    * @brief Load a mesh (e.g. gltf) into assets from a file.

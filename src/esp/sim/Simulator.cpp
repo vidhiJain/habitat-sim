@@ -15,7 +15,7 @@
 #include "esp/core/esp.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/RenderCamera.h"
-#include "esp/gfx/RenderKeyframe.h"
+#include "esp/gfx/RenderKeyframeWriter.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/io/io.h"
 #include "esp/metadata/attributes/AttributesBase.h"
@@ -726,6 +726,14 @@ void Simulator::sampleRandomAgentState(agent::AgentState& agentState) {
   }
 }
 
+scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+    const assets::AssetInfo& assetInfo,
+    const assets::RenderAssetInstanceCreation& creation) {
+  std::vector<int> tempIDs{activeSceneID_, activeSemanticSceneID_};
+  return resourceManager_->loadAndAddRenderAssetInstance(assetInfo, creation,
+                                                  sceneManager_.get(), tempIDs);
+}
+
 agent::Agent::ptr Simulator::addAgent(
     const agent::AgentConfiguration& agentConfig,
     scene::SceneNode& agentParentNode) {
@@ -898,6 +906,28 @@ void Simulator::setObjectLightSetup(const int objectID,
                                  lightSetupKey);
   }
 }
+
+#if 0  // for reference; deleteme
+scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+    const esp::assets::RenderAssetInstanceCreation& creation) {
+
+  if (creation.isRGBD && creation.isSemantic) {
+    sensorType = (creation.isRGBD && creation.isSemantic)
+      ? scene::SensorType::OBJECT
+      : scene::SensorType::EMPTY;
+  }
+
+  int sceneId = (isSemantic && !isRGBD)
+    ? activeSemanticSceneID_
+    : activeSceneID_;
+
+  auto& graph = sceneManager_->getSceneGraph(sceneId);
+
+  return resourceManager_->loadAndAddRenderAssetInstance(
+    creation, graph);
+
+}
+#endif
 
 }  // namespace sim
 }  // namespace esp

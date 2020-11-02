@@ -5,12 +5,10 @@
 #pragma once
 
 #include "esp/assets/Asset.h"
+#include "esp/assets/RenderAssetInstanceCreation.h"
 #include "esp/scene/SceneNode.h"  // todo: forward decl
 #include "esp/sensor/Sensor.h"
 #include "esp/sensor/VisualSensor.h"
-
-#include <Corrade/Containers/Optional.h>
-#include "Magnum/Resource.h"
 
 #include <string>
 
@@ -19,19 +17,9 @@ namespace gfx {
 
 // todo: put all these structs in a replay/keyframe namespace
 
-class NodeDeletionHelper;
-
 using RenderAssetInstanceKey = uint32_t;
 
 // to serialize creation event
-struct RenderAssetInstanceCreation {
-  RenderAssetInstanceKey instanceKey;
-  esp::assets::AssetInfo assetInfo;
-  bool isSemantic;
-  bool isRGBD;
-  Magnum::ResourceKey lightSetupKey;
-};
-
 struct RenderAssetInstanceState {
   Magnum::Matrix4 absTransform;  // todo: Matrix4 or Matrix4x4?
   // todo: support semanticId per drawable?
@@ -56,7 +44,10 @@ struct ObservationRecord {
 // previous drawObservation
 struct RenderKeyframe {
   // int simStepCount; // todo later
-  std::vector<RenderAssetInstanceCreation> creations;
+  std::vector<esp::assets::AssetInfo> loads;
+  std::vector<std::pair<RenderAssetInstanceKey,
+                        esp::assets::RenderAssetInstanceCreation>>
+      creations;
   std::vector<RenderAssetInstanceKey> deletions;
   std::vector<std::pair<RenderAssetInstanceKey, RenderAssetInstanceState>>
       stateUpdates;
@@ -67,32 +58,6 @@ struct RenderAssetInstanceRecord {
   scene::SceneNode* node;
   RenderAssetInstanceKey instanceKey;
   Corrade::Containers::Optional<RenderAssetInstanceState> recentState;
-};
-
-class RenderKeyframeWriter {
- public:
-  void onCreateRenderAssetInstance(scene::SceneNode* node,
-                                   const esp::assets::AssetInfo& assetInfo,
-                                   bool isSemantic,
-                                   bool isRGBD,
-                                   Magnum::ResourceKey lightSetupKey);
-
-  void onDrawObservation(const sensor::VisualSensor& visualSensor);
-
- private:
-  // NodeDeletionHelper calls onDeleteRenderAssetInstance
-  friend class NodeDeletionHelper;
-
-  void onDeleteRenderAssetInstance(const scene::SceneNode* node);
-  RenderKeyframe& getKeyframe();
-  RenderAssetInstanceKey getNewInstanceKey();
-  int findInstance(const scene::SceneNode* queryNode);
-  RenderAssetInstanceState getInstanceState(const scene::SceneNode* node);
-  void updateInstanceStates();
-
-  std::vector<RenderAssetInstanceRecord> instanceRecords_;
-  std::vector<RenderKeyframe> keyframes_;
-  RenderAssetInstanceKey nextInstanceKey_ = 0;
 };
 
 }  // namespace gfx
