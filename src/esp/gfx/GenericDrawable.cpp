@@ -16,6 +16,8 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 
+bool g_disableColorTextures = false;
+
 GenericDrawable::GenericDrawable(scene::SceneNode& node,
                                  Mn::GL::Mesh& mesh,
                                  Drawable::Flags& meshAttributeFlags,
@@ -26,39 +28,9 @@ GenericDrawable::GenericDrawable(scene::SceneNode& node,
     : Drawable{node, mesh, group},
       shaderManager_{shaderManager},
       lightSetup_{shaderManager.get<LightSetup>(lightSetupKey)},
+      meshAttributeFlags_{meshAttributeFlags},
       materialData_{
           shaderManager.get<MaterialData, PhongMaterialData>(materialDataKey)} {
-  flags_ = Mn::Shaders::Phong::Flag::ObjectId;
-  if (materialData_->textureMatrix != Mn::Matrix3{}) {
-    flags_ |= Mn::Shaders::Phong::Flag::TextureTransformation;
-  }
-  if (materialData_->ambientTexture) {
-    flags_ |= Mn::Shaders::Phong::Flag::AmbientTexture;
-  }
-  if (materialData_->diffuseTexture) {
-    flags_ |= Mn::Shaders::Phong::Flag::DiffuseTexture;
-  }
-  if (materialData_->specularTexture) {
-    flags_ |= Mn::Shaders::Phong::Flag::SpecularTexture;
-  }
-  if (materialData_->normalTexture) {
-    if (meshAttributeFlags & Drawable::Flag::HasTangent) {
-      flags_ |= Mn::Shaders::Phong::Flag::NormalTexture;
-      if (meshAttributeFlags & Drawable::Flag::HasSeparateBitangent) {
-        flags_ |= Mn::Shaders::Phong::Flag::Bitangent;
-      }
-    } else {
-      LOG(WARNING) << "Mesh does not have tangents and Magnum cannot generate "
-                      "them yet, ignoring a normal map";
-    }
-  }
-  if (materialData_->perVertexObjectId) {
-    flags_ |= Mn::Shaders::Phong::Flag::InstancedObjectId;
-  }
-  if (materialData_->vertexColored) {
-    flags_ |= Mn::Shaders::Phong::Flag::VertexColor;
-  }
-
   // update the shader early here to to avoid doing it during the render loop
   updateShader();
 }
@@ -152,6 +124,39 @@ void GenericDrawable::draw(const Mn::Matrix4& transformationMatrix,
 
 void GenericDrawable::updateShader() {
   Mn::UnsignedInt lightCount = lightSetup_->size();
+
+  flags_ = Mn::Shaders::Phong::Flag::ObjectId;
+  if (materialData_->textureMatrix != Mn::Matrix3{}) {
+    flags_ |= Mn::Shaders::Phong::Flag::TextureTransformation;
+  }
+  if (!g_disableColorTextures) {
+    if (materialData_->ambientTexture) {
+      flags_ |= Mn::Shaders::Phong::Flag::AmbientTexture;
+    }
+    if (materialData_->diffuseTexture) {
+      flags_ |= Mn::Shaders::Phong::Flag::DiffuseTexture;
+    }
+    if (materialData_->specularTexture) {
+      flags_ |= Mn::Shaders::Phong::Flag::SpecularTexture;
+    }
+  }
+  if (materialData_->normalTexture) {
+    if (meshAttributeFlags_ & Drawable::Flag::HasTangent) {
+      flags_ |= Mn::Shaders::Phong::Flag::NormalTexture;
+      if (meshAttributeFlags_ & Drawable::Flag::HasSeparateBitangent) {
+        flags_ |= Mn::Shaders::Phong::Flag::Bitangent;
+      }
+    } else {
+      LOG(WARNING) << "Mesh does not have tangents and Magnum cannot generate "
+                      "them yet, ignoring a normal map";
+    }
+  }
+  if (materialData_->perVertexObjectId) {
+    flags_ |= Mn::Shaders::Phong::Flag::InstancedObjectId;
+  }
+  if (materialData_->vertexColored) {
+    flags_ |= Mn::Shaders::Phong::Flag::VertexColor;
+  }
 
   if (!shader_ || shader_->lightCount() != lightCount ||
       shader_->flags() != flags_) {

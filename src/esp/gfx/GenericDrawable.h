@@ -48,8 +48,11 @@ class GenericDrawable : public Drawable {
   Magnum::Resource<MaterialData, PhongMaterialData> materialData_;
   Magnum::Resource<LightSetup> lightSetup_;
 
+  Drawable::Flags meshAttributeFlags_;
   Magnum::Shaders::Phong::Flags flags_;
 };
+
+extern bool g_disableColorTextures;
 
 }  // namespace gfx
 }  // namespace esp
