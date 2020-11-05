@@ -41,16 +41,16 @@ BulletRigidObject::BulletRigidObject(
       MotionState(*rigidBodyNode) {}
 
 BulletRigidObject::~BulletRigidObject() {
-
-  if (!isActive()) {
-    // This object may be supporting other sleeping objects, so wake them before
-    // removing.
-    activateCollisionIsland();
+  if (objectMotionType_ != MotionType::STATIC) {
+    // remove rigid body from the world
+    bWorld_->removeRigidBody(bObjectRigidBody_.get());
+  } else if (objectMotionType_ == MotionType::STATIC) {
+    // remove collision objects from the world
+    for (auto& co : bStaticCollisionObjects_) {
+      bWorld_->removeRigidBody(co.get());
+      collisionObjToObjIds_->erase(co.get());
+    }
   }
-
-  // remove rigid body from the world
-  bWorld_->removeRigidBody(bObjectRigidBody_.get());
-
   collisionObjToObjIds_->erase(bObjectRigidBody_.get());
 
 }  //~BulletRigidObject
@@ -121,9 +121,28 @@ bool BulletRigidObject::initialization_LibSpecific(
 
   bObjectShape_->setLocalScaling(btVector3{tmpAttr->getScale()});
 
-  bObjectShape_->recalculateLocalAabb();
-  // create the bObjectRigidBody_
-  constructAndAddRigidBody(objectMotionType_);
+  btVector3 bInertia = btVector3(tmpAttr->getInertia());
+
+  if (!usingBBCollisionShape_) {
+    if (bInertia == btVector3{0, 0, 0}) {
+      // allow bullet to compute the inertia tensor if we don't have one
+      bObjectShape_->calculateLocalInertia(tmpAttr->getMass(),
+                                           bInertia);  // overrides bInertia
+    }
+  }
+
+  //! Bullet rigid body setup
+  btRigidBody::btRigidBodyConstructionInfo info =
+      btRigidBody::btRigidBodyConstructionInfo(tmpAttr->getMass(),
+                                               &(btMotionState()),
+                                               bObjectShape_.get(), bInertia);
+  info.m_friction = tmpAttr->getFrictionCoefficient();
+  info.m_restitution = tmpAttr->getRestitutionCoefficient();
+  info.m_linearDamping = tmpAttr->getLinearDamping();
+  info.m_angularDamping = tmpAttr->getAngularDamping();
+
+  //! Create rigid body
+  bObjectRigidBody_ = std::make_unique<btRigidBody>(info);
 
   //! Add to world
   bWorld_->addRigidBody(bObjectRigidBody_.get(),
@@ -212,61 +231,6 @@ BulletRigidObject::buildPrimitiveCollisionObject(int primTypeVal,
   return obj;
 }  // buildPrimitiveCollisionObject
 
-// recursively create the convex mesh shapes and add them to the compound in a
-// flat manner by accumulating transformations down the tree
-void BulletRigidObject::constructBulletCompoundFromMeshes(
-    const Magnum::Matrix4& transformFromParentToWorld,
-    const std::vector<assets::CollisionMeshData>& meshGroup,
-    const assets::MeshTransformNode& node,
-    bool join) {
-  Magnum::Matrix4 transformFromLocalToWorld =
-      transformFromParentToWorld * node.transformFromLocalToParent;
-  if (node.meshIDLocal != ID_UNDEFINED) {
-    // This node has a mesh, so add it to the compound
-
-    const assets::CollisionMeshData& mesh = meshGroup[node.meshIDLocal];
-
-    if (join) {
-      // add all points to a single convex instead of compounding (more
-      // stable)
-      if (bObjectConvexShapes_.empty()) {
-        // create the convex if it does not exist
-        bObjectConvexShapes_.emplace_back(
-            std::make_unique<btConvexHullShape>());
-      }
-
-      // add points
-      for (auto& v : mesh.positions) {
-        bObjectConvexShapes_.back()->addPoint(
-            btVector3(transformFromLocalToWorld.transformPoint(v)), false);
-      }
-
-    } else {
-      bObjectConvexShapes_.emplace_back(std::make_unique<btConvexHullShape>());
-      // transform points into world space, including any scale/shear in
-      // transformFromLocalToWorld.
-      for (auto& v : mesh.positions) {
-        bObjectConvexShapes_.back()->addPoint(
-            btVector3(transformFromLocalToWorld.transformPoint(v)), false);
-      }
-      // bObjectConvexShapes_.back()->optimizeConvexHull();
-      // bObjectConvexShapes_.back()->initializePolyhedralFeatures();
-      // Remove local convex margin in favor of margin on the containing
-      // compound
-      bObjectConvexShapes_.back()->setMargin(0.0);
-      bObjectConvexShapes_.back()->recalcLocalAabb();
-      //! Add to compound shape stucture
-      bObjectShape_->addChildShape(btTransform::getIdentity(),
-                                   bObjectConvexShapes_.back().get());
-    }
-  }
-
-  for (auto& child : node.children) {
-    constructBulletCompoundFromMeshes(transformFromLocalToWorld, meshGroup,
-                                      child, join);
-  }
-}  // constructBulletCompoundFromMeshes
-
 void BulletRigidObject::setCollisionFromBB() {
   btVector3 dim(node().getCumulativeBB().size() / 2.0);
 
@@ -291,9 +255,6 @@ void BulletRigidObject::setCollisionFromBB() {
 }  // setCollisionFromBB
 
 bool BulletRigidObject::setMotionType(MotionType mt) {
-  if (mt == MotionType::ERROR_MOTIONTYPE) {
-    return false;
-  }
   if (mt == objectMotionType_) {
     return true;  // no work
   }

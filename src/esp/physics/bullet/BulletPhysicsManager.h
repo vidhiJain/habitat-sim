@@ -224,13 +224,6 @@ class BulletPhysicsManager : public PhysicsManager {
 
   void removeP2PConstraint(int p2pId);
 
-  // The number of contact points that were active during the last step. An
-  // object resting on another object will involve several active contact
-  // points. Once both objects are asleep, the contact points are inactive. This
-  // count can be used as a metric for the complexity/cost of collision-handling
-  // in the current scene.
-  int getNumActiveContactPoints() override;
-
   int nextP2PId_ = 0;
   std::map<int, btMultiBodyPoint2Point*> articulatedP2ps;
   std::map<int, btPoint2PointConstraint*> rigidP2ps;
