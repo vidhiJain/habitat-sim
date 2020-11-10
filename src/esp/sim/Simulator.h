@@ -872,6 +872,8 @@ class Simulator {
 
   void clearRecycledObjectIds();
 
+  void updateDropPointNode(Magnum::Vector3 position);
+
   /**
    * @brief Getter for PRNG.
    *
@@ -958,6 +960,7 @@ class Simulator {
   Corrade::Containers::Optional<bool> requiresTextures_;
 
   esp::scene::SceneNode* crossHairNode_ = nullptr;
+  esp::scene::SceneNode* dropPointNode_ = nullptr;
 
   ESP_SMART_POINTERS(Simulator)
 };
