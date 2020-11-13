@@ -86,6 +86,7 @@ PYBIND11_MODULE(habitat_sim_bindings, m) {
   esp::physics::initPhysicsBindings(m);
   esp::scene::initSceneBindings(m);
   esp::gfx::initGfxBindings(m);
+  esp::gfx::initRenderReplayBindings(m);
   esp::sensor::initSensorBindings(m);
   esp::nav::initShortestPathBindings(m);
   esp::sim::initSimBindings(m);

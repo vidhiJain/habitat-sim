@@ -255,6 +255,10 @@ class Simulator(SimulatorBackend):
         for sensor_uuid, sensor in self._sensors.items():
             observations[sensor_uuid] = sensor.get_observation()
 
+        if self.config.sim_cfg.enable_render_replay_save:
+            # doing this instead of Renderer.cpp call to writer onDrawObservation
+            super().render_replay.save_keyframe()
+
         return observations
 
     def last_state(self):

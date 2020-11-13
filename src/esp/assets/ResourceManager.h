@@ -56,7 +56,8 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 class Drawable;
-}
+class RenderKeyframeWriter;
+}  // namespace gfx
 namespace scene {
 struct SceneConfiguration;
 }
@@ -492,6 +493,18 @@ class ResourceManager {
    */
   inline void setRequiresTextures(bool newVal) { requiresTextures_ = newVal; }
 
+  void setRenderKeyframeWriter(
+      const std::shared_ptr<gfx::RenderKeyframeWriter>& renderKeyframeWriter) {
+    renderKeyframeWriter_ = renderKeyframeWriter;
+  }
+
+  // returns nullptr if load failure
+  scene::SceneNode* loadAndAddRenderAssetInstance(
+      const AssetInfo& assetInfo,
+      const RenderAssetInstanceCreationInfo& creation,
+      esp::scene::SceneManager* sceneManagerPtr,
+      const std::vector<int>& activeSceneIDs);
+
  private:
   /**
    * @brief Load the requested mesh info into @ref meshInfo corresponding to
@@ -782,7 +795,6 @@ class ResourceManager {
       const RenderAssetInstanceCreationInfo& creation,
       scene::SceneNode* parent,
       DrawableGroup* drawables);
-
   /**
    * @brief backend for both General Mesh and Primitive Mesh, for
    * createRenderAssetInstance
@@ -997,6 +1009,8 @@ class ResourceManager {
    * @brief Flag to load textures of meshes
    */
   bool requiresTextures_ = true;
+
+  std::shared_ptr<esp::gfx::RenderKeyframeWriter> renderKeyframeWriter_;
 };  // class ResourceManager
 
 CORRADE_ENUMSET_OPERATORS(ResourceManager::Flags)

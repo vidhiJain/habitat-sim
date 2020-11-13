@@ -39,6 +39,7 @@
 #include "esp/gfx/GenericDrawable.h"
 #include "esp/gfx/MaterialUtil.h"
 #include "esp/gfx/PbrDrawable.h"
+#include "esp/gfx/RenderKeyframeWriter.h"
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
@@ -248,7 +249,7 @@ bool ResourceManager::loadStage(
   }
 
   if (forceSeparateSemanticSceneGraph &&
-      activeSceneIDs[1] == activeSceneIDs[0]) {
+      activeSemanticSceneID == activeSceneIDs[0]) {
     // Create a separate semantic scene graph if it wasn't already created
     // above.
     activeSemanticSceneID = sceneManagerPtr->initSceneGraph();
@@ -455,11 +456,11 @@ bool ResourceManager::loadRenderAsset(const AssetInfo& info) {
     // loadRenderAsset doesn't yet support the requested asset type
     CORRADE_INTERNAL_ASSERT_UNREACHABLE();
   }
-#if 0  // coming soon
+
   if (renderKeyframeWriter_) {
     renderKeyframeWriter_->onLoadRenderAsset(info);
   }
-#endif
+
   return meshSuccess;
 }
 
@@ -501,11 +502,10 @@ scene::SceneNode* ResourceManager::createRenderAssetInstance(
     CORRADE_INTERNAL_ASSERT_UNREACHABLE();
   }
 
-#if 0  // coming soon
   if (renderKeyframeWriter_ && newNode) {
-    renderKeyframeWriter_->onCreateRenderAssetInstance(&newNode, creation);
+    renderKeyframeWriter_->onCreateRenderAssetInstance(newNode, creation);
   }
-#endif
+
   return newNode;
 }
 
@@ -1200,11 +1200,6 @@ scene::SceneNode* ResourceManager::createRenderAssetInstanceGeneralPrimitive(
                computeAbsoluteAABBs,  // compute absolute AABBs
                staticDrawableInfo);   // a vector of static drawable info
 
-  if (computeAbsoluteAABBs) {
-    // now compute aabbs by constructed staticDrawableInfo
-    computeGeneralMeshAbsoluteAABBs(staticDrawableInfo);
-  }
-
   // set the node type for all cached visual nodes
   if (nodeType != scene::SceneNodeType::EMPTY) {
     for (auto node : visNodeCache) {
@@ -1299,7 +1294,6 @@ bool ResourceManager::buildTrajectoryVisualization(
   auto inserted =
       resourceDict_.emplace(trajVisName, std::move(loadedAssetData));
 
-  return true;
 }  // ResourceManager::loadTrajectoryVisualization
 
 int ResourceManager::loadNavMeshVisualization(esp::nav::PathFinder& pathFinder,
@@ -1817,6 +1811,66 @@ bool ResourceManager::instantiateAssetsOnDemand(
 
   return true;
 }  // ResourceManager::instantiateAssetsOnDemand
+
+scene::SceneNode* ResourceManager::loadAndAddRenderAssetInstance(
+    const AssetInfo& assetInfo,
+    const RenderAssetInstanceCreationInfo& creation,
+    esp::scene::SceneManager* sceneManagerPtr,
+    const std::vector<int>& activeSceneIDs) {
+  // We map isStatic, isSemantic, and isRGBD to a scene graph.
+  int sceneID = -1;
+  if (!creation.isStatic()) {
+    // Non-static instances must always get added to the RGBD scene graph, with
+    // nodeType==OBJECT, and they will be drawn for both RGBD and Semantic
+    // sensors.
+    if (!(creation.isSemantic() && creation.isRGBD())) {
+      LOG(WARNING) << "unsupported instance creation flags for asset ["
+                   << assetInfo.filepath << "]";
+      return nullptr;
+    }
+    sceneID = activeSceneIDs[0];
+  } else {
+    if (creation.isSemantic() && creation.isRGBD()) {
+      if (activeSceneIDs[1] != activeSceneIDs[0]) {
+        // Because we have a separate semantic scene graph, we can't support a
+        // static instance with both isSemantic and isRGBD.
+        LOG(WARNING)
+            << "unsupported instance creation flags for asset ["
+            << assetInfo.filepath
+            << "] with "
+               "SimulatorConfiguration::forceSeparateSemanticSceneGraph=true.";
+        return nullptr;
+      }
+      sceneID = activeSceneIDs[0];
+    } else {
+      if (activeSceneIDs[1] == activeSceneIDs[0]) {
+        // A separate semantic scene graph wasn't constructed, so we can't
+        // support a Semantic-only (or RGBD-only) instance.
+        LOG(WARNING)
+            << "unsupported instance creation flags for asset ["
+            << assetInfo.filepath
+            << "] with "
+               "SimulatorConfiguration::forceSeparateSemanticSceneGraph=false.";
+        return nullptr;
+      }
+      sceneID = creation.isSemantic() ? activeSceneIDs[1] : activeSceneIDs[0];
+    }
+  }
+
+  auto& sceneGraph = sceneManagerPtr->getSceneGraph(sceneID);
+  auto& rootNode = sceneGraph.getRootNode();
+  auto& drawables = sceneGraph.getDrawables();
+
+  const bool fileIsLoaded = resourceDict_.count(assetInfo.filepath) > 0;
+  if (!fileIsLoaded) {
+    if (!loadRenderAsset(assetInfo)) {
+      return nullptr;
+    }
+  }
+
+  ASSERT(assetInfo.filepath == creation.filepath);
+  return createRenderAssetInstance(creation, &rootNode, &drawables);
+}
 
 void ResourceManager::addObjectToDrawables(
     const std::string& objTemplateHandle,

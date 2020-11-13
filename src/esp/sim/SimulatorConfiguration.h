@@ -32,6 +32,10 @@ struct SimulatorConfiguration {
    */
   bool enablePhysics = false;
   /**
+   * @brief enable saving for render replay
+   */
+  bool enableRenderReplaySave = false;
+  /**
    * @brief Whether or not to load the semantic mesh
    */
   bool loadSemanticMesh = true;

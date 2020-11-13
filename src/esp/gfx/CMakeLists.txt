@@ -22,6 +22,14 @@ set(
   Renderer.h
   WindowlessContext.cpp
   WindowlessContext.h
+  RenderKeyframe.h
+  RenderKeyframe.cpp
+  RenderKeyframeReader.h
+  RenderKeyframeReader.cpp
+  RenderKeyframeWriter.h
+  RenderKeyframeWriter.cpp
+  RenderReplayManager.h
+  RenderReplayManager.cpp
   RenderTarget.cpp
   RenderTarget.h
   ShaderManager.cpp

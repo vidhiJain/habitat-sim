@@ -16,6 +16,8 @@
 #include "esp/core/esp.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/RenderCamera.h"
+#include "esp/gfx/RenderKeyframeWriter.h"
+#include "esp/gfx/RenderReplayManager.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/io/io.h"
 #include "esp/metadata/attributes/AttributesBase.h"
@@ -55,6 +57,7 @@ void Simulator::close() {
   agents_.clear();
 
   physicsManager_ = nullptr;
+  renderReplayMgr_ = nullptr;
   semanticScene_ = nullptr;
 
   sceneID_.clear();
@@ -187,6 +190,8 @@ void Simulator::reconfigure(const SimulatorConfiguration& cfg) {
       renderer_ = gfx::Renderer::create(flags);
     }
 
+    reconfigureRenderReplayManager();
+
     auto& sceneGraph = sceneManager_->getSceneGraph(activeSceneID_);
     auto& rootNode = sceneGraph.getRootNode();
     // auto& drawables = sceneGraph.getDrawables();
@@ -295,6 +300,22 @@ void Simulator::reset() {
 void Simulator::seed(uint32_t newSeed) {
   random_->seed(newSeed);
   pathfinder_->seed(newSeed);
+}
+
+void Simulator::reconfigureRenderReplayManager() {
+  renderReplayMgr_ = std::make_shared<gfx::RenderReplayManager>();
+
+  renderReplayMgr_->setWriter(config_.enableRenderReplaySave
+                              ? std::make_shared<gfx::RenderKeyframeWriter>()
+                              : nullptr);
+  ASSERT(resourceManager_);
+  resourceManager_->setRenderKeyframeWriter(renderReplayMgr_->getWriter());
+
+  renderReplayMgr_->setReader(
+      std::make_shared<esp::gfx::RenderKeyframeReader>(std::bind(
+          &esp::sim::Simulator::loadAndAddRenderAssetInstance, this,
+          std::placeholders::_1, std::placeholders::_2)));
+
 }
 
 scene::SceneGraph& Simulator::getActiveSceneGraph() {
@@ -785,6 +806,15 @@ void Simulator::sampleRandomAgentState(agent::AgentState& agentState) {
   }
 }
 
+scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+    const assets::AssetInfo& assetInfo,
+    const assets::RenderAssetInstanceCreationInfo& creation) {
+  std::vector<int> tempIDs{activeSceneID_, activeSemanticSceneID_};
+  return resourceManager_->loadAndAddRenderAssetInstance(
+      assetInfo, creation, sceneManager_.get(), tempIDs);
+}
+
+
 agent::Agent::ptr Simulator::addAgent(
     const agent::AgentConfiguration& agentConfig,
     scene::SceneNode& agentParentNode) {
@@ -957,6 +987,28 @@ void Simulator::setObjectLightSetup(const int objectID,
                                  lightSetupKey);
   }
 }
+
+#if 0  // for reference; deleteme
+scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+    const esp::assets::RenderAssetInstanceCreationInfo& creation) {
+
+  if (creation.isRGBD && creation.isSemantic) {
+    sensorType = (creation.isRGBD && creation.isSemantic)
+      ? scene::SensorType::OBJECT
+      : scene::SensorType::EMPTY;
+  }
+
+  int sceneId = (isSemantic && !isRGBD)
+    ? activeSemanticSceneID_
+    : activeSceneID_;
+
+  auto& graph = sceneManager_->getSceneGraph(sceneId);
+
+  return resourceManager_->loadAndAddRenderAssetInstance(
+    creation, graph);
+
+}
+#endif
 
 }  // namespace sim
 }  // namespace esp

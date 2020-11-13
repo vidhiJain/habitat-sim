@@ -32,7 +32,12 @@ class SemanticScene;
 }  // namespace scene
 namespace gfx {
 class Renderer;
+class RenderKeyframeWriter;
+class RenderReplayManager;
 }  // namespace gfx
+namespace assets {
+struct RenderAssetInstanceCreationInfo;
+}
 }  // namespace esp
 
 namespace esp {
@@ -67,6 +72,8 @@ class Simulator {
 
   scene::SceneGraph& getActiveSceneGraph();
   scene::SceneGraph& getActiveSemanticSceneGraph();
+
+  std::shared_ptr<gfx::RenderReplayManager> getRenderReplayManager() { return renderReplayMgr_; }
 
   void saveFrame(const std::string& filename);
 
@@ -826,6 +833,18 @@ class Simulator {
     metadataMediator_ = _metadataMediator;
   }
 
+  scene::SceneNode* loadAndAddRenderAssetInstance(
+      const assets::AssetInfo& assetInfo,
+      const assets::RenderAssetInstanceCreationInfo& creation);
+
+  void renderReplaySaveKeyframe();
+
+  void renderReplayAddUserObjectToKeyframe(const std::string& name,
+                                           const Magnum::Vector3& translation,
+                                           const Magnum::Quaternion& rotation);
+
+  void renderReplayWriteKeyframesToFile(const std::string& filepath);
+
  protected:
   Simulator(){};
 
@@ -839,6 +858,8 @@ class Simulator {
   bool sceneHasPhysics(int sceneID) const {
     return isValidScene(sceneID) && physicsManager_ != nullptr;
   }
+
+  void reconfigureRenderReplayManager();
 
   gfx::WindowlessContext::uptr context_ = nullptr;
   std::shared_ptr<gfx::Renderer> renderer_ = nullptr;
@@ -860,6 +881,9 @@ class Simulator {
   std::shared_ptr<scene::SemanticScene> semanticScene_ = nullptr;
 
   std::shared_ptr<physics::PhysicsManager> physicsManager_ = nullptr;
+
+  // std::shared_ptr<gfx::RenderKeyframeWriter> renderKeyframeWriter_;
+  std::shared_ptr<esp::gfx::RenderReplayManager> renderReplayMgr_;
 
   core::Random::ptr random_;
   SimulatorConfiguration config_;
