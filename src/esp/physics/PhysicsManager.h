@@ -18,6 +18,7 @@
 /* Bullet Physics Integration */
 
 #include "ArticulatedObject.h"
+#include "CollisionGroupHelper.h"
 #include "RigidObject.h"
 #include "RigidStage.h"
 #include "esp/assets/Asset.h"
@@ -373,6 +374,30 @@ class PhysicsManager {
     return existingArticulatedObjects_.at(objectId)->createMotorsForAllDofs(
         settings);
   };
+
+  //============ Constraint functions =============
+
+  virtual int createArticulatedP2PConstraint(
+      int articulatedObjectId,
+      int linkId,
+      int objectId,
+      float maxImpulse,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotA,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotB) {
+    return -1;
+  }
+
+  virtual int createArticulatedFixedConstraint(
+      int articulatedObjectId,
+      int linkId,
+      int objectId,
+      float maxImpulse,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotA,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotB) {
+    return -1;
+  }
+
+  virtual void removeConstraint(int constraintId) {}
 
   //============ Simulator functions =============
 
@@ -965,6 +990,9 @@ class PhysicsManager {
   virtual bool contactTest(CORRADE_UNUSED const int physObjectID) {
     return false;
   };
+
+  virtual void overrideCollisionGroup(const int physObjectID,
+                                      CollisionGroup group) const {}
 
   /** @brief Return the library implementation type for the simulator currently
    * in use. Use to check for a particular implementation.

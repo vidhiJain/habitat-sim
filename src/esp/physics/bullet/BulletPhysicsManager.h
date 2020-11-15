@@ -16,6 +16,7 @@
 
 #include "BulletDynamics/ConstraintSolver/btPoint2PointConstraint.h"
 #include "BulletDynamics/Featherstone/btMultiBodyConstraintSolver.h"
+#include "BulletDynamics/Featherstone/btMultiBodyFixedConstraint.h"
 #include "BulletDynamics/Featherstone/btMultiBodyJointMotor.h"
 #include "BulletDynamics/Featherstone/btMultiBodyPoint2Point.h"
 
@@ -24,6 +25,7 @@
 #include "BulletDebugManager.h"
 #include "BulletRigidObject.h"
 #include "BulletRigidStage.h"
+#include "esp/physics/CollisionGroupHelper.h"
 #include "esp/physics/PhysicsManager.h"
 #include "esp/physics/bullet/BulletRigidObject.h"
 
@@ -185,6 +187,9 @@ class BulletPhysicsManager : public PhysicsManager {
    */
   bool contactTest(const int physObjectID) override;
 
+  void overrideCollisionGroup(const int physObjectID,
+                              CollisionGroup group) const override;
+
   /**
    * @brief Cast a ray into the collision world and return a @ref RaycastResults
    * with hit information.
@@ -220,12 +225,34 @@ class BulletPhysicsManager : public PhysicsManager {
                                      int linkId,
                                      Magnum::Vector3 pickPos);
 
-  void updateP2PConstraintPivot(int p2pId, Magnum::Vector3 pivot);
+  // point2point constraint between multibody and rigid body
+  int createArticulatedP2PConstraint(
+      int articulatedObjectId,
+      int linkId,
+      int objectId,
+      float maxImpulse,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotA,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotB) override;
 
-  void removeP2PConstraint(int p2pId);
+  int createArticulatedFixedConstraint(
+      int articulatedObjectId,
+      int linkId,
+      int objectId,
+      float maxImpulse,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotA,
+      const Corrade::Containers::Optional<Magnum::Vector3>& pivotB) override;
 
-  int nextP2PId_ = 0;
+  void updateP2PConstraintPivot(int constraintId, Magnum::Vector3 pivot);
+
+  void removeConstraint(int constraintId) override;
+
+  int createArticulatedFixedConstraint(int articulatedObjectId,
+                                       int linkId,
+                                       int objectId);
+
+  int nextConstraintId_ = 0;
   std::map<int, btMultiBodyPoint2Point*> articulatedP2ps;
+  std::map<int, btMultiBodyFixedConstraint*> articulatedFixedConstraints;
   std::map<int, btPoint2PointConstraint*> rigidP2ps;
 
   int getNumActiveContactPoints() {

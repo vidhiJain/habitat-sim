@@ -13,6 +13,8 @@
 #include "BulletDebugManager.h"
 #include "BulletRigidStage.h"
 
+#include "esp/physics/CollisionGroupHelper.h"
+
 namespace esp {
 namespace physics {
 
@@ -46,8 +48,9 @@ bool BulletRigidStage::initialization_LibSpecific(
     object->setFriction(initializationAttributes_->getFrictionCoefficient());
     object->setRestitution(
         initializationAttributes_->getRestitutionCoefficient());
-    bWorld_->addRigidBody(object.get(), btBroadphaseProxy::StaticFilter,
-                          btBroadphaseProxy::DefaultFilter);
+    bWorld_->addRigidBody(
+        object.get(), int(CollisionGroup::Static),
+        CollisionGroupHelper::getMaskForGroup(CollisionGroup::Static));
     collisionObjToObjIds_->emplace(object.get(), objectId_);
   }
 

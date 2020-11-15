@@ -14,6 +14,8 @@
 #include "BulletDebugManager.h"
 #include "BulletRigidObject.h"
 
+#include "esp/physics/CollisionGroupHelper.h"
+
 //!  A Few considerations in construction
 //!  Bullet Mesh conversion adapted from:
 //!      https://github.com/mosra/magnum-integration/issues/20
@@ -145,9 +147,9 @@ bool BulletRigidObject::initialization_LibSpecific(
   bObjectRigidBody_ = std::make_unique<btRigidBody>(info);
 
   //! Add to world
-  bWorld_->addRigidBody(bObjectRigidBody_.get(),
-                        btBroadphaseProxy::DefaultFilter,
-                        btBroadphaseProxy::AllFilter);
+  bWorld_->addRigidBody(
+      bObjectRigidBody_.get(), int(CollisionGroup::FreeObject),
+      CollisionGroupHelper::getMaskForGroup(CollisionGroup::FreeObject));
   collisionObjToObjIds_->emplace(bObjectRigidBody_.get(), objectId_);
   BulletDebugManager::get().mapCollisionObjectTo(bObjectRigidBody_.get(),
                                                  getCollisionDebugName());
@@ -276,9 +278,9 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
         bObjectRigidBody_->getCollisionFlags() &
         ~btCollisionObject::CF_STATIC_OBJECT);
     objectMotionType_ = MotionType::KINEMATIC;
-    bWorld_->addRigidBody(bObjectRigidBody_.get(),
-                          btBroadphaseProxy::KinematicFilter,
-                          btBroadphaseProxy::DefaultFilter);
+    bWorld_->addRigidBody(
+        bObjectRigidBody_.get(), int(CollisionGroup::Kinematic),
+        CollisionGroupHelper::getMaskForGroup(CollisionGroup::Kinematic));
     return true;
   } else if (mt == MotionType::STATIC) {
     bObjectRigidBody_->setCollisionFlags(
@@ -298,9 +300,9 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
     std::unique_ptr<btRigidBody> staticCollisionObject =
         std::make_unique<btRigidBody>(cInfo);
     ASSERT(staticCollisionObject->isStaticObject());
-    bWorld_->addRigidBody(staticCollisionObject.get(),
-                          btBroadphaseProxy::StaticFilter,
-                          btBroadphaseProxy::DefaultFilter);
+    bWorld_->addRigidBody(
+        staticCollisionObject.get(), int(CollisionGroup::Static),
+        CollisionGroupHelper::getMaskForGroup(CollisionGroup::Static));
     collisionObjToObjIds_->emplace(staticCollisionObject.get(), objectId_);
     BulletDebugManager::get().mapCollisionObjectTo(staticCollisionObject.get(),
                                                    getCollisionDebugName());
@@ -314,9 +316,9 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
         bObjectRigidBody_->getCollisionFlags() &
         ~btCollisionObject::CF_KINEMATIC_OBJECT);
     objectMotionType_ = MotionType::DYNAMIC;
-    bWorld_->addRigidBody(bObjectRigidBody_.get(),
-                          btBroadphaseProxy::DefaultFilter,
-                          btBroadphaseProxy::AllFilter);
+    bWorld_->addRigidBody(
+        bObjectRigidBody_.get(), int(CollisionGroup::FreeObject),
+        CollisionGroupHelper::getMaskForGroup(CollisionGroup::FreeObject));
     setActive();
     return true;
   } else if (mt == MotionType::RENDER_ONLY) {
@@ -400,6 +402,17 @@ bool BulletRigidObject::isMe(const btCollisionObject* collisionObject) {
   }
 
   return false;
+}
+
+void BulletRigidObject::overrideCollisionGroup(CollisionGroup group) {
+  if (!bObjectRigidBody_->isInWorld()) {
+    LOG(ERROR) << "BulletRigidObject::overrideCollisionGroup failed because "
+                  "the Bullet body hasn't yet been added to the Bullet world.";
+  }
+
+  bWorld_->removeRigidBody(bObjectRigidBody_.get());
+  bWorld_->addRigidBody(bObjectRigidBody_.get(), int(group),
+                        CollisionGroupHelper::getMaskForGroup(group));
 }
 
 }  // namespace physics

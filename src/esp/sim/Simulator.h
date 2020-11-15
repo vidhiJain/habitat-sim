@@ -762,6 +762,34 @@ class Simulator {
    */
   core::Random::ptr random() { return random_; }
 
+  void overrideCollisionGroup(int objectID, int group);
+
+  int createArticulatedP2PConstraint(int articulatedObjectId,
+                                     int linkId,
+                                     int objectId,
+                                     float maxImpulse);
+
+  int createArticulatedP2PConstraintWithPivots(int articulatedObjectId,
+                                               int linkId,
+                                               int objectId,
+                                               const Magnum::Vector3& pivotA,
+                                               const Magnum::Vector3& pivotB,
+                                               float maxImpulse);
+
+  int createArticulatedFixedConstraint(int articulatedObjectId,
+                                       int linkId,
+                                       int objectId,
+                                       float maxImpulse);
+
+  int createArticulatedFixedConstraintWithPivots(int articulatedObjectId,
+                                                 int linkId,
+                                                 int objectId,
+                                                 const Magnum::Vector3& pivotA,
+                                                 const Magnum::Vector3& pivotB,
+                                                 float maxImpulse);
+
+  void removeConstraint(int constraintId);
+
   int getPhysicsNumActiveContactPoints() {
     return physicsManager_->getNumActiveContactPoints();
   }
