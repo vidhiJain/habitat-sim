@@ -137,8 +137,8 @@ void ResourceManager::initDefaultPrimAttributes() {
       std::make_unique<Magnum::GL::Mesh>(Magnum::MeshTools::compile(*wfCube));
 
   auto sphereMeshName =
-      assetAttributesManager_
-          ->getTemplateCopyByHandle<IcospherePrimitiveAttributes>(
+      getAssetAttributesManager()
+          ->getObjectCopyByHandle<IcospherePrimitiveAttributes>(
               "icosphereSolid_subdivs_1")
           ->getPrimObjClassName();
 
