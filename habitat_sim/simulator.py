@@ -254,7 +254,7 @@ class Simulator(SimulatorBackend):
         self._last_state = agent.state
         return agent
 
-    def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]::
+    def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]:
         # to handle case of rendering cross hair
         for _, sensor in self._sensors.items():
             sensor.draw_observation(self.render_to_ui)
@@ -262,7 +262,7 @@ class Simulator(SimulatorBackend):
         for _, sensor in self._sensors.items():
             sensor.draw_observation(self.render_to_ui)
 
-        observations = {}
+        observations: Dict[str, Union[ndarray, "Tensor"]] = {}
         for sensor_uuid, sensor in self._sensors.items():
             if self.render_to_ui:
                 observations[sensor_uuid] = None
