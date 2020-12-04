@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "RenderKeyframe.h"
+#include "Keyframe.h"
 
 #include "esp/assets/Asset.h"                            // todo: forward decl
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"  // todo: forward decl
@@ -34,8 +34,8 @@ class Recorder {
   void saveKeyframe();
 
   void addUserTransformToKeyframe(const std::string& name,
-                               const Magnum::Vector3& translation,
-                               const Magnum::Quaternion& rotation);
+                                  const Magnum::Vector3& translation,
+                                  const Magnum::Quaternion& rotation);
 
   void writeSavedKeyframesToFile(const std::string& filepath);
   rapidjson::Document writeKeyframesToJsonDocument();
@@ -44,27 +44,27 @@ class Recorder {
   // NodeDeletionHelper calls onDeleteRenderAssetInstance
   friend class NodeDeletionHelper;
 
-  using RenderKeyframeIterator = std::vector<RenderKeyframe>::const_iterator;
+  using KeyframeIterator = std::vector<Keyframe>::const_iterator;
 
   void onDeleteRenderAssetInstance(const scene::SceneNode* node);
-  RenderKeyframe& getKeyframe();
+  Keyframe& getKeyframe();
   void advanceKeyframe();
   RenderAssetInstanceKey getNewInstanceKey();
   int findInstance(const scene::SceneNode* queryNode);
   RenderAssetInstanceState getInstanceState(const scene::SceneNode* node);
   void updateInstanceStates();
-  void checkAndAddDeletion(RenderKeyframe* keyframe,
+  void checkAndAddDeletion(Keyframe* keyframe,
                            RenderAssetInstanceKey instanceKey);
-  void addLoadsCreationsDeletions(RenderKeyframeIterator begin,
-                                  RenderKeyframeIterator end,
-                                  RenderKeyframe* dest);
+  void addLoadsCreationsDeletions(KeyframeIterator begin,
+                                  KeyframeIterator end,
+                                  Keyframe* dest);
 
   std::vector<RenderAssetInstanceRecord> instanceRecords_;
-  RenderKeyframe currKeyframe_;
-  std::vector<RenderKeyframe> savedKeyframes_;
+  Keyframe currKeyframe_;
+  std::vector<Keyframe> savedKeyframes_;
   RenderAssetInstanceKey nextInstanceKey_ = 0;
 };
 
-}
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp

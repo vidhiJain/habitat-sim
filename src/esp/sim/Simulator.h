@@ -31,9 +31,11 @@ namespace scene {
 class SemanticScene;
 }  // namespace scene
 namespace gfx {
+namespace replay {
 class Renderer;
 class Recorder;
-class RenderReplayManager;
+class ReplayManager;
+}  // namespace replay
 }  // namespace gfx
 namespace assets {
 struct RenderAssetInstanceCreationInfo;
@@ -73,7 +75,7 @@ class Simulator {
   scene::SceneGraph& getActiveSceneGraph();
   scene::SceneGraph& getActiveSemanticSceneGraph();
 
-  std::shared_ptr<gfx::RenderReplayManager> getRenderReplayManager() {
+  std::shared_ptr<gfx::replay::ReplayManager> getReplayManager() {
     return renderReplayMgr_;
   }
 
@@ -861,7 +863,7 @@ class Simulator {
     return isValidScene(sceneID) && physicsManager_ != nullptr;
   }
 
-  void reconfigureRenderReplayManager();
+  void reconfigureReplayManager();
 
   gfx::WindowlessContext::uptr context_ = nullptr;
   std::shared_ptr<gfx::Renderer> renderer_ = nullptr;
@@ -884,8 +886,8 @@ class Simulator {
 
   std::shared_ptr<physics::PhysicsManager> physicsManager_ = nullptr;
 
-  // std::shared_ptr<gfx::replay::Recorder> renderKeyframeWriter_;
-  std::shared_ptr<esp::gfx::RenderReplayManager> renderReplayMgr_;
+  // std::shared_ptr<gfx::replay::Recorder> gfxReplayRecorder_;
+  std::shared_ptr<esp::gfx::replay::ReplayManager> renderReplayMgr_;
 
   core::Random::ptr random_;
   SimulatorConfiguration config_;

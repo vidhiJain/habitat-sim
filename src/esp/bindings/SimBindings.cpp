@@ -13,7 +13,7 @@
 
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
-#include "esp/gfx/RenderReplayManager.h"
+#include "esp/gfx/replay/ReplayManager.h"
 #include "esp/scene/SemanticScene.h"
 #include "esp/sim/Simulator.h"
 #include "esp/sim/SimulatorConfiguration.h"
@@ -73,7 +73,7 @@ void initSimBindings(py::module& m) {
             Not available for all datasets
             )")
       .def_property_readonly("renderer", &Simulator::getRenderer)
-      .def_property_readonly("render_replay", &Simulator::getRenderReplayManager)
+      .def_property_readonly("render_replay", &Simulator::getReplayManager)
       .def("seed", &Simulator::seed, "new_seed"_a)
       .def("reconfigure", &Simulator::reconfigure, "configuration"_a)
       .def("reset", &Simulator::reset)

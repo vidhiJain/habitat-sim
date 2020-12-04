@@ -56,7 +56,9 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 class Drawable;
+namespace replay {
 class Recorder;
+}
 }  // namespace gfx
 namespace scene {
 struct SceneConfiguration;
@@ -494,12 +496,13 @@ class ResourceManager {
   inline void setRequiresTextures(bool newVal) { requiresTextures_ = newVal; }
 
   void setRecorder(
-      const std::shared_ptr<gfx::replay::Recorder>& renderKeyframeWriter) {
-    renderKeyframeWriter_ = renderKeyframeWriter;
+      const std::shared_ptr<gfx::replay::Recorder>& gfxReplayRecorder) {
+    gfxReplayRecorder_ = gfxReplayRecorder;
   }
 
   /**
-   * @brief Load a render asset (if not already loaded) and create a render asset instance.
+   * @brief Load a render asset (if not already loaded) and create a render
+   * asset instance.
    *
    * @param assetInfo the render asset to load
    * @param creation How to create the instance
@@ -1018,7 +1021,7 @@ class ResourceManager {
    */
   bool requiresTextures_ = true;
 
-  std::shared_ptr<esp::gfx::replay::Recorder> renderKeyframeWriter_;
+  std::shared_ptr<esp::gfx::replay::Recorder> gfxReplayRecorder_;
 };  // class ResourceManager
 
 CORRADE_ENUMSET_OPERATORS(ResourceManager::Flags)

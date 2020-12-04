@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "RenderKeyframe.h"
+#include "Keyframe.h"
 
 #include "esp/assets/Asset.h"
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"
@@ -17,16 +17,16 @@
 
 namespace esp {
 namespace gfx {
+namespace replay {
 
-class RenderKeyframeReader {
+class Player {
  public:
   using LoadAndCreateRenderAssetInstanceCallback =
       std::function<esp::scene::SceneNode*(
           const esp::assets::AssetInfo&,
           const esp::assets::RenderAssetInstanceCreationInfo&)>;
 
-  RenderKeyframeReader(
-      const LoadAndCreateRenderAssetInstanceCallback& callback);
+  Player(const LoadAndCreateRenderAssetInstanceCallback& callback);
 
   void readKeyframesFromFile(const std::string& filepath);
   void readKeyframesFromJsonDocument(const rapidjson::Document& d);
@@ -42,18 +42,19 @@ class RenderKeyframeReader {
 
  private:
   void clearFrame();  // todo: better name for setting to frame -1
-  void applyKeyframe(const RenderKeyframe& keyframe);
+  void applyKeyframe(const Keyframe& keyframe);
 
   LoadAndCreateRenderAssetInstanceCallback
       loadAndCreateRenderAssetInstanceCallback;
   int frameIndex_ = -1;
-  std::vector<RenderKeyframe> keyframes_;
+  std::vector<Keyframe> keyframes_;
   std::map<std::string, esp::assets::AssetInfo> assetInfos_;
   std::map<RenderAssetInstanceKey, scene::SceneNode*> createdInstances_;
   std::set<std::string> failedFilepaths_;
 
-  ESP_SMART_POINTERS(RenderKeyframeReader)
+  ESP_SMART_POINTERS(Player)
 };
 
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp

@@ -18,35 +18,38 @@ using namespace rapidjson;
 
 namespace esp {
 namespace gfx {
+namespace replay {
 
 /**
- * @brief Helper class to get notified when a SceneNode is about to be destroyed.
+ * @brief Helper class to get notified when a SceneNode is about to be
+ * destroyed.
  */
 class NodeDeletionHelper : public Magnum::SceneGraph::AbstractFeature3D {
  public:
   NodeDeletionHelper(scene::SceneNode& node_, Recorder* writer)
       : Magnum::SceneGraph::AbstractFeature3D(node_),
         node(&node_),
-        writer_(writer) {}
+        recorder_(writer) {}
 
-  virtual ~NodeDeletionHelper() { writer_->onDeleteRenderAssetInstance(node); }
+  virtual ~NodeDeletionHelper() {
+    recorder_->onDeleteRenderAssetInstance(node);
+  }
 
  private:
-  Recorder* writer_ = nullptr;
+  Recorder* recorder_ = nullptr;
   const scene::SceneNode* node = nullptr;
 };
 
 Recorder::~Recorder() {
-  // Delete NodeDeletionHelpers. This is important because they hold raw pointers
-  // to this Recorder and these pointers would become dangling (invalid)
-  // after this Recorder is destroyed.
+  // Delete NodeDeletionHelpers. This is important because they hold raw
+  // pointers to this Recorder and these pointers would become dangling
+  // (invalid) after this Recorder is destroyed.
   for (auto& instanceRecord : instanceRecords_) {
     delete instanceRecord.deletionHelper;
   }
 }
 
-void Recorder::onLoadRenderAsset(
-    const esp::assets::AssetInfo& assetInfo) {
+void Recorder::onLoadRenderAsset(const esp::assets::AssetInfo& assetInfo) {
   getKeyframe().loads.push_back(assetInfo);
 }
 
@@ -60,12 +63,13 @@ void Recorder::onCreateRenderAssetInstance(
 
   getKeyframe().creations.emplace_back(std::make_pair(instanceKey, creation));
 
-  // Constructing NodeDeletionHelper here is equivalent to calling node->addFeature.
-  // We keep a pointer to deletionHelper so we can delete it manually later if necessary.
+  // Constructing NodeDeletionHelper here is equivalent to calling
+  // node->addFeature. We keep a pointer to deletionHelper so we can delete it
+  // manually later if necessary.
   NodeDeletionHelper* deletionHelper = new NodeDeletionHelper{*node, this};
 
-  instanceRecords_.emplace_back(
-      RenderAssetInstanceRecord{node, instanceKey, Corrade::Containers::NullOpt, deletionHelper});
+  instanceRecords_.emplace_back(RenderAssetInstanceRecord{
+      node, instanceKey, Corrade::Containers::NullOpt, deletionHelper});
 }
 
 void Recorder::saveKeyframe() {
@@ -73,19 +77,17 @@ void Recorder::saveKeyframe() {
   advanceKeyframe();
 }
 
-void Recorder::addUserTransformToKeyframe(
-    const std::string& name,
-    const Magnum::Vector3& translation,
-    const Magnum::Quaternion& rotation) {
+void Recorder::addUserTransformToKeyframe(const std::string& name,
+                                          const Magnum::Vector3& translation,
+                                          const Magnum::Quaternion& rotation) {
   getKeyframe().userTransforms[name] = Transform{translation, rotation};
 }
 
-void Recorder::addLoadsCreationsDeletions(
-    RenderKeyframeIterator begin,
-    RenderKeyframeIterator end,
-    RenderKeyframe* dest) {
+void Recorder::addLoadsCreationsDeletions(KeyframeIterator begin,
+                                          KeyframeIterator end,
+                                          Keyframe* dest) {
   ASSERT(dest);
-  for (RenderKeyframeIterator curr = begin; curr != end; curr++) {
+  for (KeyframeIterator curr = begin; curr != end; curr++) {
     const auto& keyframe = *curr;
     dest->loads.insert(dest->loads.end(), keyframe.loads.begin(),
                        keyframe.loads.end());
@@ -97,9 +99,8 @@ void Recorder::addLoadsCreationsDeletions(
   }
 }
 
-void Recorder::checkAndAddDeletion(
-    RenderKeyframe* keyframe,
-    RenderAssetInstanceKey instanceKey) {
+void Recorder::checkAndAddDeletion(Keyframe* keyframe,
+                                   RenderAssetInstanceKey instanceKey) {
   auto it =
       std::find_if(keyframe->creations.begin(), keyframe->creations.end(),
                    [&](const auto& pair) { return pair.first == instanceKey; });
@@ -113,8 +114,7 @@ void Recorder::checkAndAddDeletion(
   }
 }
 
-void Recorder::onDeleteRenderAssetInstance(
-    const scene::SceneNode* node) {
+void Recorder::onDeleteRenderAssetInstance(const scene::SceneNode* node) {
   int index = findInstance(node);
   ASSERT(index != -1);
 
@@ -125,7 +125,7 @@ void Recorder::onDeleteRenderAssetInstance(
   instanceRecords_.erase(instanceRecords_.begin() + index);
 }
 
-RenderKeyframe& Recorder::getKeyframe() {
+Keyframe& Recorder::getKeyframe() {
   return currKeyframe_;
 }
 
@@ -146,12 +146,10 @@ RenderAssetInstanceState Recorder::getInstanceState(
     const scene::SceneNode* node) {
   const auto absTransformMat = node->absoluteTransformation();
   Transform absTransform{
-    absTransformMat.translation(),
-    Magnum::Quaternion::fromMatrix(absTransformMat.rotationShear())};
+      absTransformMat.translation(),
+      Magnum::Quaternion::fromMatrix(absTransformMat.rotationShear())};
 
-  return RenderAssetInstanceState{
-      absTransform,
-      node->getSemanticId()};
+  return RenderAssetInstanceState{absTransform, node->getSemanticId()};
 }
 
 void Recorder::updateInstanceStates() {
@@ -167,11 +165,10 @@ void Recorder::updateInstanceStates() {
 
 void Recorder::advanceKeyframe() {
   savedKeyframes_.emplace_back(std::move(currKeyframe_));
-  currKeyframe_ = RenderKeyframe{};
+  currKeyframe_ = Keyframe{};
 }
 
-void Recorder::writeSavedKeyframesToFile(
-    const std::string& filepath) {
+void Recorder::writeSavedKeyframesToFile(const std::string& filepath) {
   auto document = writeKeyframesToJsonDocument();
   esp::io::writeJsonToFile(document, filepath);
 
@@ -181,10 +178,10 @@ void Recorder::writeSavedKeyframesToFile(
   savedKeyframes_.clear();
 }
 
-
 rapidjson::Document Recorder::writeKeyframesToJsonDocument() {
   if (savedKeyframes_.empty()) {
-    LOG(WARNING) << "Recorder::writeKeyframesToJsonDocument: no saved keyframes to write";
+    LOG(WARNING) << "Recorder::writeKeyframesToJsonDocument: no saved "
+                    "keyframes to write";
     return rapidjson::Document();
   }
 
@@ -274,5 +271,6 @@ rapidjson::Document Recorder::writeKeyframesToJsonDocument() {
   return d;
 }
 
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp

@@ -6,7 +6,7 @@
 
 #include "esp/assets/Asset.h"
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"
-#include "esp/gfx/RenderKeyframe.h"
+#include "esp/gfx/replay/Keyframe.h"
 
 #include <Magnum/Math/Matrix4.h>
 #include <Magnum/Resource.h>
@@ -227,7 +227,7 @@ void ReadMember(const Value& value,
 
 void AddMember(Value& value,
                GenericStringRef<char> name,
-               const esp::gfx::Transform& x,
+               const esp::gfx::replay::Transform& x,
                MemoryPoolAllocator<>& allocator) {
   Value obj(kObjectType);
   AddMember(obj, "translation", x.translation, allocator);
@@ -235,7 +235,9 @@ void AddMember(Value& value,
   value.AddMember(name, obj, allocator);
 }
 
-void ReadMember(const Value& value, const char* name, esp::gfx::Transform& x) {
+void ReadMember(const Value& value,
+                const char* name,
+                esp::gfx::replay::Transform& x) {
   const Value& obj = value[name];
   ReadMember(obj, "translation", x.translation);
   ReadMember(obj, "rotation", x.rotation);

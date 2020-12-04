@@ -14,6 +14,7 @@
 
 namespace esp {
 namespace gfx {
+namespace replay {
 
 class NodeDeletionHelper;
 
@@ -40,10 +41,7 @@ struct RenderAssetInstanceState {
   }
 };
 
-// to serialize a drawObservation event plus all scene graph changes since the
-// previous drawObservation
-struct RenderKeyframe {
-  // int simStepCount; // todo later
+struct Keyframe {
   std::vector<esp::assets::AssetInfo> loads;
   std::vector<std::pair<RenderAssetInstanceKey,
                         esp::assets::RenderAssetInstanceCreationInfo>>
@@ -61,5 +59,6 @@ struct RenderAssetInstanceRecord {
   NodeDeletionHelper* deletionHelper = nullptr;
 };
 
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp

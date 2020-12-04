@@ -22,8 +22,10 @@ struct RenderAssetInstanceCreationInfo;
 struct AssetInfo;
 }  // namespace assets
 namespace gfx {
+namespace replay {
 struct Transform;
 }
+}  // namespace gfx
 }  // namespace esp
 
 namespace esp {
@@ -158,12 +160,12 @@ void ReadMember(const rapidjson::Value& value,
 
 void AddMember(rapidjson::Value& value,
                rapidjson::GenericStringRef<char> name,
-               const esp::gfx::Transform& x,
+               const esp::gfx::replay::Transform& x,
                rapidjson::MemoryPoolAllocator<>& allocator);
 
 void ReadMember(const rapidjson::Value& value,
                 const char* name,
-                esp::gfx::Transform& x);
+                esp::gfx::replay::Transform& x);
 
 }  // namespace io
 }  // namespace esp

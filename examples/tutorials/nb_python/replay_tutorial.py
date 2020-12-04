@@ -30,7 +30,6 @@ import sys
 
 import git
 import numpy as np
-import magnum as mn
 
 import habitat_sim
 from habitat_sim.utils import viz_utils as vut
@@ -58,13 +57,13 @@ def place_agent(sim):
     agent = sim.initialize_agent(0, agent_state)
     return agent.scene_node.transformation_matrix()
 
+
 def render_replay_add_agent_user_transform(sim):
     agent = sim.get_agent(0)
     sim.render_replay.add_user_transform_to_keyframe(
-        "agent",
-        agent.body.object.translation,
-        agent.body.object.rotation
+        "agent", agent.body.object.translation, agent.body.object.rotation
     )
+
 
 def render_replay_set_agent_from_user_transform(player, sim):
     agent = sim.get_agent(0)
@@ -72,7 +71,10 @@ def render_replay_set_agent_from_user_transform(player, sim):
     agent.body.object.translation = agent_translation
     agent.body.object.rotation = agent_rotation
 
-def make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=False):
+
+def make_backend_configuration_for_render_replay_playback(
+    need_separate_semantic_scene_graph=False,
+):
 
     backend_cfg = habitat_sim.SimulatorConfiguration()
     backend_cfg.scene_id = "NONE"  # see Asset.h EMPTY_SCENE
@@ -85,7 +87,7 @@ def make_configuration():
     # simulator configuration
     backend_cfg = habitat_sim.SimulatorConfiguration()
     backend_cfg.scene_id = os.path.join(
-        data_path, 
+        data_path,
         "scene_datasets/habitat-test-scenes/apartment_1.glb"
         # "/home/eundersander/projects/matterport/v1/tasks/mp3d_habitat/mp3d/D7G3Y4RVNrH/D7G3Y4RVNrH.glb"
     )
@@ -177,8 +179,8 @@ if __name__ == "__main__":
     # %%
     # @title Run three episodes. Save videos and replays.
 
-    # for episode_index in range(num_episodes):
-    if False:  # temp disable recording
+    for episode_index in range(num_episodes):
+        # if False:  # temp disable recording
 
         if not sim:
             sim = habitat_sim.Simulator(cfg)
@@ -254,8 +256,11 @@ if __name__ == "__main__":
     # use same agents/sensors from earlier, with different backend config
     playback_cfg = habitat_sim.Configuration(
         # make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=True),
-        make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=False),
-        cfg.agents)
+        make_backend_configuration_for_render_replay_playback(
+            need_separate_semantic_scene_graph=False
+        ),
+        cfg.agents,
+    )
 
     if not sim:
         sim = habitat_sim.Simulator(playback_cfg)
@@ -298,6 +303,6 @@ if __name__ == "__main__":
             observations,
             "rgba_camera_1stperson",
             "color",
-            output_path + episodeName + "_playback",
+            output_path + "_playback",
             open_vid=show_video,
         )

@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "RenderKeyframeReader.h"
+#include "Player.h"
 
 #include "esp/assets/ResourceManager.h"
 #include "esp/io/JsonSerializeTypes.h"
@@ -18,8 +18,9 @@ using namespace rapidjson;
 
 namespace esp {
 namespace gfx {
+namespace replay {
 
-void RenderKeyframeReader::readKeyframesFromJsonDocument(const Document& d) {
+void Player::readKeyframesFromJsonDocument(const Document& d) {
   auto& keyframes = keyframes_;
 
   ASSERT(keyframes.empty());
@@ -29,7 +30,7 @@ void RenderKeyframeReader::readKeyframesFromJsonDocument(const Document& d) {
     const Value& keyframesArray = itr->value;
     keyframes.reserve(keyframesArray.Size());
     for (const auto& keyframeObj : keyframesArray.GetArray()) {
-      RenderKeyframe keyframe;
+      Keyframe keyframe;
 
       itr = keyframeObj.FindMember("loads");
       if (itr != keyframeObj.MemberEnd()) {
@@ -99,11 +100,10 @@ void RenderKeyframeReader::readKeyframesFromJsonDocument(const Document& d) {
   }
 }
 
-RenderKeyframeReader::RenderKeyframeReader(
-    const LoadAndCreateRenderAssetInstanceCallback& callback)
+Player::Player(const LoadAndCreateRenderAssetInstanceCallback& callback)
     : loadAndCreateRenderAssetInstanceCallback(callback) {}
 
-void RenderKeyframeReader::readKeyframesFromFile(const std::string& filepath) {
+void Player::readKeyframesFromFile(const std::string& filepath) {
   clearFrame();
   keyframes_.clear();
 
@@ -112,15 +112,15 @@ void RenderKeyframeReader::readKeyframesFromFile(const std::string& filepath) {
 }
 
 // returns -1 if no frame index set yet
-int RenderKeyframeReader::getFrameIndex() {
+int Player::getFrameIndex() {
   return frameIndex_;
 }
 
-int RenderKeyframeReader::getNumFrames() {
+int Player::getNumFrames() {
   return keyframes_.size();
 }
 
-void RenderKeyframeReader::setFrame(int frameIndex) {
+void Player::setFrame(int frameIndex) {
   ASSERT(frameIndex >= 0 && frameIndex < getNumFrames());
 
   if (frameIndex < frameIndex_) {
@@ -132,9 +132,9 @@ void RenderKeyframeReader::setFrame(int frameIndex) {
   }
 }
 
-bool RenderKeyframeReader::getUserTransform(const std::string& name,
-                                            Magnum::Vector3* translation,
-                                            Magnum::Quaternion* rotation) {
+bool Player::getUserTransform(const std::string& name,
+                              Magnum::Vector3* translation,
+                              Magnum::Quaternion* rotation) {
   ASSERT(frameIndex_ >= 0 && frameIndex_ < getNumFrames());
   ASSERT(translation);
   ASSERT(rotation);
@@ -149,7 +149,7 @@ bool RenderKeyframeReader::getUserTransform(const std::string& name,
   }
 }
 
-void RenderKeyframeReader::clearFrame() {
+void Player::clearFrame() {
   for (const auto& pair : createdInstances_) {
     delete pair.second;
   }
@@ -158,7 +158,7 @@ void RenderKeyframeReader::clearFrame() {
   frameIndex_ = -1;
 }
 
-void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
+void Player::applyKeyframe(const Keyframe& keyframe) {
   for (const auto& assetInfo : keyframe.loads) {
     ASSERT(assetInfos_.count(assetInfo.filepath) == 0);
     if (failedFilepaths_.count(assetInfo.filepath)) {
@@ -171,8 +171,8 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
     const auto& creation = pair.second;
     if (!assetInfos_.count(creation.filepath)) {
       if (!failedFilepaths_.count(creation.filepath)) {
-        LOG(WARNING) << "RenderKeyframeReader: missing asset info for ["
-                     << creation.filepath << "]";
+        LOG(WARNING) << "Player: missing asset info for [" << creation.filepath
+                     << "]";
         failedFilepaths_.insert(creation.filepath);
       }
       continue;
@@ -182,8 +182,8 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
         assetInfos_[creation.filepath], creation);
     if (!node) {
       if (!failedFilepaths_.count(creation.filepath)) {
-        LOG(WARNING) << "RenderKeyframeReader: load failed for asset ["
-                     << creation.filepath << "]";
+        LOG(WARNING) << "Player: load failed for asset [" << creation.filepath
+                     << "]";
         failedFilepaths_.insert(creation.filepath);
       }
       continue;
@@ -222,5 +222,6 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
   }
 }
 
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp

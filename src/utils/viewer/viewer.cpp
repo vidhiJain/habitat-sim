@@ -25,8 +25,8 @@
 #include <Magnum/Shaders/Shaders.h>
 
 #include "esp/gfx/RenderCamera.h"
-#include "esp/gfx/RenderKeyframeReader.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/Player.h"
 #include "esp/nav/PathFinder.h"
 #include "esp/scene/ObjectControls.h"
 #include "esp/scene/SceneNode.h"
@@ -324,7 +324,7 @@ Key Commands:
   // returns the number of visible drawables (meshVisualizer drawables are not
   // included)
 
-  std::unique_ptr<esp::gfx::RenderKeyframeReader> renderKeyframeReader_;
+  std::unique_ptr<esp::gfx::replay::Player> replayPlayer_;
 };
 
 Viewer::Viewer(const Arguments& arguments)
@@ -500,10 +500,9 @@ Viewer::Viewer(const Arguments& arguments)
 
   objectPickingHelper_ = std::make_unique<ObjectPickingHelper>(viewportSize);
 
-  renderKeyframeReader_ =
-      std::make_unique<esp::gfx::RenderKeyframeReader>(std::bind(
-          &esp::sim::Simulator::loadAndCreateRenderAssetInstance,
-          simulator_.get(), std::placeholders::_1, std::placeholders::_2));
+  replayPlayer_ = std::make_unique<esp::gfx::replay::Player>(std::bind(
+      &esp::sim::Simulator::loadAndCreateRenderAssetInstance, simulator_.get(),
+      std::placeholders::_1, std::placeholders::_2));
 
   timeline_.start();
 
@@ -1059,16 +1058,16 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       break;
 #if 0  // todo: remove
     case KeyEvent::Key::M:
-      renderKeyframeReader_->readKeyframesFromFile("my_replay_simple.json");
+      replayPlayer_->readKeyframesFromFile("my_replay_simple.json");
       break;
     case KeyEvent::Key::Comma:
-      renderKeyframeReader_->setFrame(
-          std::max(renderKeyframeReader_->getFrameIndex() - 1, 0));
+      replayPlayer_->setFrame(
+          std::max(replayPlayer_->getFrameIndex() - 1, 0));
       break;
     case KeyEvent::Key::Period:
-      renderKeyframeReader_->setFrame(
-          std::min(renderKeyframeReader_->getFrameIndex() + 1,
-                   renderKeyframeReader_->getNumFrames() - 1));
+      replayPlayer_->setFrame(
+          std::min(replayPlayer_->getFrameIndex() + 1,
+                   replayPlayer_->getNumFrames() - 1));
       break;
 #endif
 

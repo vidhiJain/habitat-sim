@@ -16,9 +16,9 @@
 #include "esp/core/esp.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/RenderCamera.h"
-#include "esp/gfx/Recorder.h"
-#include "esp/gfx/RenderReplayManager.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/Recorder.h"
+#include "esp/gfx/replay/ReplayManager.h"
 #include "esp/io/io.h"
 #include "esp/metadata/attributes/AttributesBase.h"
 #include "esp/nav/PathFinder.h"
@@ -190,7 +190,7 @@ void Simulator::reconfigure(const SimulatorConfiguration& cfg) {
       renderer_ = gfx::Renderer::create(flags);
     }
 
-    reconfigureRenderReplayManager();
+    reconfigureReplayManager();
 
     auto& sceneGraph = sceneManager_->getSceneGraph(activeSceneID_);
     auto& rootNode = sceneGraph.getRootNode();
@@ -302,19 +302,18 @@ void Simulator::seed(uint32_t newSeed) {
   pathfinder_->seed(newSeed);
 }
 
-void Simulator::reconfigureRenderReplayManager() {
-  renderReplayMgr_ = std::make_shared<gfx::RenderReplayManager>();
+void Simulator::reconfigureReplayManager() {
+  renderReplayMgr_ = std::make_shared<gfx::replay::ReplayManager>();
 
-  renderReplayMgr_->setWriter(
-      config_.enableRenderReplaySave
-          ? std::make_shared<gfx::replay::Recorder>()
-          : nullptr);
+  renderReplayMgr_->setRecorder(config_.enableRenderReplaySave
+                                    ? std::make_shared<gfx::replay::Recorder>()
+                                    : nullptr);
   ASSERT(resourceManager_);
-  resourceManager_->setRecorder(renderReplayMgr_->getWriter());
+  resourceManager_->setRecorder(renderReplayMgr_->getRecorder());
 
-  renderReplayMgr_->setReaderCallback(
-    std::bind(&esp::sim::Simulator::loadAndCreateRenderAssetInstance, this, 
-    std::placeholders::_1, std::placeholders::_2));
+  renderReplayMgr_->setPlayerCallback(
+      std::bind(&esp::sim::Simulator::loadAndCreateRenderAssetInstance, this,
+                std::placeholders::_1, std::placeholders::_2));
 }
 
 scene::SceneGraph& Simulator::getActiveSceneGraph() {
@@ -985,7 +984,6 @@ void Simulator::setObjectLightSetup(const int objectID,
                                  lightSetupKey);
   }
 }
-
 
 }  // namespace sim
 }  // namespace esp
