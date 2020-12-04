@@ -15,8 +15,6 @@
 namespace esp {
 namespace gfx {
 
-// todo: put all these structs in a replay/keyframe namespace
-
 class NodeDeletionHelper;
 
 using RenderAssetInstanceKey = uint32_t;
@@ -42,17 +40,6 @@ struct RenderAssetInstanceState {
   }
 };
 
-#if 0  // for reference; todo: #define to disable all this code
-// to serialize drawObservation event
-struct ObservationRecord {
-  esp::sensor::SensorType sensorType;
-  Magnum::Matrix4
-      cameraTransform;  // world to camera; todo: Matrix4 or Matrix4x4?
-  // todo: include full camera/sensor data so we can reproduce original
-  // observation
-};
-#endif
-
 // to serialize a drawObservation event plus all scene graph changes since the
 // previous drawObservation
 struct RenderKeyframe {
@@ -65,9 +52,6 @@ struct RenderKeyframe {
   std::vector<std::pair<RenderAssetInstanceKey, RenderAssetInstanceState>>
       stateUpdates;
   std::unordered_map<std::string, Transform> userTransforms;
-#if 0  // for reference
-  Corrade::Containers::Optional<ObservationRecord> observation;
-#endif
 };
 
 struct RenderAssetInstanceRecord {

@@ -8,6 +8,7 @@
 #include <Magnum/SceneGraph/PythonBindings.h>
 
 #include "esp/gfx/RenderReplayManager.h"
+#include "esp/gfx/RenderKeyframeReader.h"
 
 namespace py = pybind11;
 using py::literals::operator""_a;
@@ -16,6 +17,34 @@ namespace esp {
 namespace gfx {
 
 void initRenderReplayBindings(py::module& m) {
+
+  py::class_<RenderKeyframeReader, RenderKeyframeReader::ptr>(m, "RenderKeyframeReader")
+      .def(
+          "get_num_keyframes",
+          &RenderKeyframeReader::getNumFrames,
+          R"(todo)")
+
+      .def(
+          "set_keyframe_index",
+          &RenderKeyframeReader::setFrame,
+          R"(todo)")
+
+      .def(
+          "get_keyframe_index",
+          &RenderKeyframeReader::getFrameIndex,
+          R"(todo)")
+
+      .def(
+          "get_user_transform",
+          [](RenderKeyframeReader& self, const std::string& name) {
+            Magnum::Vector3 translation;
+            Magnum::Quaternion rotation;
+            bool found = self.getUserTransform(name, &translation, &rotation);
+            return found
+              ? py::make_tuple(translation, rotation)
+              : py::make_tuple(nullptr, nullptr);
+          },
+          R"(todo)");
 
   py::class_<RenderReplayManager, RenderReplayManager::ptr>(m, "RenderReplayManager")
       .def(
@@ -54,61 +83,12 @@ void initRenderReplayBindings(py::module& m) {
           },
           R"(Write all saved keyframes to a file, then discard the keyframes.)")
 
+      // todo: player/reader naming
       .def(
           "player_load_from_file",
-          [](RenderReplayManager& self, const std::string& filepath) {
-            // todo: decide getReader() by pointer or what
-            self.getReader()->readKeyframesFromFile(filepath);
-          },
-          R"(Load keyframes for playback. See also player_set_keyframe_index.)")
-
-      .def(
-          "player_get_num_keyframes",
-          [](RenderReplayManager& self) {
-            return self.getReader()->getNumFrames();
-          },
-          R"(todo)")
-
-      .def(
-          "player_set_keyframe_index",
-          [](RenderReplayManager& self, int frameIndex) {
-            // todo: error handling
-            self.getReader()->setFrame(frameIndex);
-          },
-          R"(todo)")
-
-      .def(
-          "player_get_keyframe_index",
-          [](RenderReplayManager& self) {
-            return self.getReader()->getFrameIndex();
-          },
-          R"(todo)")
-
-      .def(
-          "player_get_user_transform",
-          [](RenderReplayManager& self, const std::string& name) {
-            Magnum::Vector3 translation;
-            Magnum::Quaternion rotation;
-            bool found = self.getReader()->getUserTransform(name, &translation, &rotation);
-            return found
-              ? py::make_tuple(translation, rotation)
-              : py::make_tuple(nullptr, nullptr);
-          },
-          R"(todo)");
+          &RenderReplayManager::readKeyframesFromFile,
+          R"(Create a RenderKeyframeReader object from a replay file.)");
 }
-
-/*
-      recorder_add_user_object_to_keyframe
-      recorder_save_keyframe
-      recorder_write_saved_keyframes_to_file
-
-      player_load_from_file
-      player_get_num_keyframes
-      player_set_keyframe_index
-      player_get_user_object
-      player_get_keyframe_index
-      */
-
 
 }  // namespace gfx
 }  // namespace esp

@@ -16,7 +16,7 @@
 #include "esp/core/esp.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/RenderCamera.h"
-#include "esp/gfx/RenderKeyframeWriter.h"
+#include "esp/gfx/Recorder.h"
 #include "esp/gfx/RenderReplayManager.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/io/io.h"
@@ -307,14 +307,14 @@ void Simulator::reconfigureRenderReplayManager() {
 
   renderReplayMgr_->setWriter(
       config_.enableRenderReplaySave
-          ? std::make_shared<gfx::RenderKeyframeWriter>()
+          ? std::make_shared<gfx::replay::Recorder>()
           : nullptr);
   ASSERT(resourceManager_);
-  resourceManager_->setRenderKeyframeWriter(renderReplayMgr_->getWriter());
+  resourceManager_->setRecorder(renderReplayMgr_->getWriter());
 
-  renderReplayMgr_->setReader(std::make_shared<esp::gfx::RenderKeyframeReader>(
-      std::bind(&esp::sim::Simulator::loadAndCreateRenderAssetInstance, this,
-                std::placeholders::_1, std::placeholders::_2)));
+  renderReplayMgr_->setReaderCallback(
+    std::bind(&esp::sim::Simulator::loadAndCreateRenderAssetInstance, this, 
+    std::placeholders::_1, std::placeholders::_2));
 }
 
 scene::SceneGraph& Simulator::getActiveSceneGraph() {
@@ -986,27 +986,6 @@ void Simulator::setObjectLightSetup(const int objectID,
   }
 }
 
-#if 0  // for reference; deleteme
-scene::SceneNode* Simulator::loadAndCreateRenderAssetInstance(
-    const esp::assets::RenderAssetInstanceCreationInfo& creation) {
-
-  if (creation.isRGBD && creation.isSemantic) {
-    sensorType = (creation.isRGBD && creation.isSemantic)
-      ? scene::SensorType::OBJECT
-      : scene::SensorType::EMPTY;
-  }
-
-  int sceneId = (isSemantic && !isRGBD)
-    ? activeSemanticSceneID_
-    : activeSceneID_;
-
-  auto& graph = sceneManager_->getSceneGraph(sceneId);
-
-  return resourceManager_->loadAndCreateRenderAssetInstance(
-    creation, graph);
-
-}
-#endif
 
 }  // namespace sim
 }  // namespace esp

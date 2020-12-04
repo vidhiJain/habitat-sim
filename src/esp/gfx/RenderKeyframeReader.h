@@ -10,7 +10,6 @@
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"
 #include "esp/scene/SceneNode.h"  // todo: forward decl
 #include "esp/sensor/Sensor.h"
-#include "esp/sensor/VisualSensor.h"
 
 #include <rapidjson/document.h>
 
@@ -52,6 +51,8 @@ class RenderKeyframeReader {
   std::map<std::string, esp::assets::AssetInfo> assetInfos_;
   std::map<RenderAssetInstanceKey, scene::SceneNode*> createdInstances_;
   std::set<std::string> failedFilepaths_;
+
+  ESP_SMART_POINTERS(RenderKeyframeReader)
 };
 
 }  // namespace gfx

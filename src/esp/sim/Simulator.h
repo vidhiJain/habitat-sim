@@ -32,7 +32,7 @@ class SemanticScene;
 }  // namespace scene
 namespace gfx {
 class Renderer;
-class RenderKeyframeWriter;
+class Recorder;
 class RenderReplayManager;
 }  // namespace gfx
 namespace assets {
@@ -884,7 +884,7 @@ class Simulator {
 
   std::shared_ptr<physics::PhysicsManager> physicsManager_ = nullptr;
 
-  // std::shared_ptr<gfx::RenderKeyframeWriter> renderKeyframeWriter_;
+  // std::shared_ptr<gfx::replay::Recorder> renderKeyframeWriter_;
   std::shared_ptr<esp::gfx::RenderReplayManager> renderReplayMgr_;
 
   core::Random::ptr random_;

@@ -56,7 +56,7 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 class Drawable;
-class RenderKeyframeWriter;
+class Recorder;
 }  // namespace gfx
 namespace scene {
 struct SceneConfiguration;
@@ -493,12 +493,20 @@ class ResourceManager {
    */
   inline void setRequiresTextures(bool newVal) { requiresTextures_ = newVal; }
 
-  void setRenderKeyframeWriter(
-      const std::shared_ptr<gfx::RenderKeyframeWriter>& renderKeyframeWriter) {
+  void setRecorder(
+      const std::shared_ptr<gfx::replay::Recorder>& renderKeyframeWriter) {
     renderKeyframeWriter_ = renderKeyframeWriter;
   }
 
-  // returns nullptr if load failure
+  /**
+   * @brief Load a render asset (if not already loaded) and create a render asset instance.
+   *
+   * @param assetInfo the render asset to load
+   * @param creation How to create the instance
+   * @param sceneManagerPtr Info about the scene graph(s). See loadStage.
+   * @param activeSceneIDs Info about the scene graph(s). See loadStage.
+   * @return the root node of the instance, or nullptr (if the load failed)
+   */
   scene::SceneNode* loadAndCreateRenderAssetInstance(
       const AssetInfo& assetInfo,
       const RenderAssetInstanceCreationInfo& creation,
@@ -1010,7 +1018,7 @@ class ResourceManager {
    */
   bool requiresTextures_ = true;
 
-  std::shared_ptr<esp::gfx::RenderKeyframeWriter> renderKeyframeWriter_;
+  std::shared_ptr<esp::gfx::replay::Recorder> renderKeyframeWriter_;
 };  // class ResourceManager
 
 CORRADE_ENUMSET_OPERATORS(ResourceManager::Flags)

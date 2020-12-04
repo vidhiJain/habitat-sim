@@ -66,9 +66,9 @@ def render_replay_add_agent_user_transform(sim):
         agent.body.object.rotation
     )
 
-def render_replay_set_agent_from_user_transform(sim):
+def render_replay_set_agent_from_user_transform(player, sim):
     agent = sim.get_agent(0)
-    (agent_translation, agent_rotation) = sim.render_replay.player_get_user_transform("agent")
+    (agent_translation, agent_rotation) = player.get_user_transform("agent")
     agent.body.object.translation = agent_translation
     agent.body.object.rotation = agent_rotation
 
@@ -86,8 +86,8 @@ def make_configuration():
     backend_cfg = habitat_sim.SimulatorConfiguration()
     backend_cfg.scene_id = os.path.join(
         data_path, 
-        # "scene_datasets/habitat-test-scenes/apartment_1.glb"
-        "/home/eundersander/projects/matterport/v1/tasks/mp3d_habitat/mp3d/D7G3Y4RVNrH/D7G3Y4RVNrH.glb"
+        "scene_datasets/habitat-test-scenes/apartment_1.glb"
+        # "/home/eundersander/projects/matterport/v1/tasks/mp3d_habitat/mp3d/D7G3Y4RVNrH/D7G3Y4RVNrH.glb"
     )
     assert os.path.exists(backend_cfg.scene_id)
     backend_cfg.enable_physics = True
@@ -167,7 +167,12 @@ if __name__ == "__main__":
     sim = None
     random.seed(0)
     replay_filepaths = []
-    num_episodes = 1
+    num_episodes = 2
+
+    for episode_index in range(num_episodes):
+        episodeName = "episode{}".format(episode_index)
+        replay_filepath = output_path + episodeName + ".json"
+        replay_filepaths.append(replay_filepath)
 
     # %%
     # @title Run three episodes. Save videos and replays.
@@ -239,9 +244,7 @@ if __name__ == "__main__":
             )
 
         # save a replay at the end of an episode
-        replay_filepath = output_path + episodeName + ".json"
-        sim.render_replay.write_saved_keyframes_to_file(replay_filepath)
-        replay_filepaths.append(replay_filepath)
+        sim.render_replay.write_saved_keyframes_to_file(replay_filepaths[episode_index])
 
         remove_all_objects(sim)
 
@@ -250,7 +253,8 @@ if __name__ == "__main__":
 
     # use same agents/sensors from earlier, with different backend config
     playback_cfg = habitat_sim.Configuration(
-        make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=True),
+        # make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=True),
+        make_backend_configuration_for_render_replay_playback(need_separate_semantic_scene_graph=False),
         cfg.agents)
 
     if not sim:
@@ -261,39 +265,39 @@ if __name__ == "__main__":
     place_agent(sim)
     agent = sim.get_agent(0)
 
-    for episode_index in range(num_episodes):
+    players = []
+    for filepath in replay_filepaths:
+        player = sim.render_replay.player_load_from_file(filepath)
+        assert player
+        players.append(player)
 
-        episodeName = "episode{}".format(episode_index)
-        replay_filepath = output_path + episodeName + ".json"
+    observations = []
 
-        sim.render_replay.player_load_from_file(replay_filepath)
+    for frame in range(players[0].get_num_keyframes()):
+        for player in players:
+            player.set_keyframe_index(frame)
+        render_replay_set_agent_from_user_transform(players[0], sim)
+        observations.append(sim.get_sensor_observations())
 
-        observations = []
+    # # play in reverse
+    # for frame in range(player.get_num_keyframes() - 2, -1, -1):
+    #     player.set_keyframe_index(frame)
+    #     render_replay_set_agent_from_user_transform(player, sim)
+    #     observations.append(sim.get_sensor_observations())
 
-        for frame in range(sim.render_replay.player_get_num_keyframes()):
-            sim.render_replay.player_set_keyframe_index(frame)
-            render_replay_set_agent_from_user_transform(sim)
-            observations.append(sim.get_sensor_observations())
+    # # play forward from different camera view
+    # agent.body.object.translation = [-1.6, -1.1, 0.2]
 
-        # # play in reverse
-        # for frame in range(sim.render_replay.player_get_num_keyframes() - 2, -1, -1):
-        #     sim.render_replay.player_set_keyframe_index(frame)
-        #     render_replay_set_agent_from_user_transform(sim)
-        #     observations.append(sim.get_sensor_observations())
+    # for frame in range(player.get_num_keyframes()):
+    #     player.set_keyframe_index(frame)
+    #     # render_replay_set_agent_from_user_transform(sim)
+    #     observations.append(sim.get_sensor_observations())
 
-        # # play forward from different camera view
-        # agent.body.object.translation = [-1.6, -1.1, 0.2]
-
-        # for frame in range(sim.render_replay.player_get_num_keyframes()):
-        #     sim.render_replay.player_set_keyframe_index(frame)
-        #     # render_replay_set_agent_from_user_transform(sim)
-        #     observations.append(sim.get_sensor_observations())
-
-        if make_video:
-            vut.make_video(
-                observations,
-                "rgba_camera_1stperson",
-                "color",
-                output_path + episodeName + "_playback",
-                open_vid=show_video,
-            )
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera_1stperson",
+            "color",
+            output_path + episodeName + "_playback",
+            open_vid=show_video,
+        )

@@ -18,12 +18,13 @@
 
 namespace esp {
 namespace gfx {
+namespace replay {
 
 class NodeDeletionHelper;
 
-class RenderKeyframeWriter {
+class Recorder {
  public:
-  ~RenderKeyframeWriter();
+  ~Recorder();
   void onCreateRenderAssetInstance(
       scene::SceneNode* node,
       const esp::assets::RenderAssetInstanceCreationInfo& creation);
@@ -36,11 +37,6 @@ class RenderKeyframeWriter {
                                const Magnum::Vector3& translation,
                                const Magnum::Quaternion& rotation);
 
-#if 0  // for reference
-  void onDrawObservation(const sensor::VisualSensor& visualSensor);
-#endif
-
-  // todo: a way to avoid absolute paths
   void writeSavedKeyframesToFile(const std::string& filepath);
   rapidjson::Document writeKeyframesToJsonDocument();
 
@@ -69,5 +65,6 @@ class RenderKeyframeWriter {
   RenderAssetInstanceKey nextInstanceKey_ = 0;
 };
 
+}
 }  // namespace gfx
 }  // namespace esp

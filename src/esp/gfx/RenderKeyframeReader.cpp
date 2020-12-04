@@ -96,8 +96,6 @@ void RenderKeyframeReader::readKeyframesFromJsonDocument(const Document& d) {
 
       keyframes.emplace_back(std::move(keyframe));  // is move needed here?
     }
-  } else {
-    // todo: warning about no keyframes
   }
 }
 

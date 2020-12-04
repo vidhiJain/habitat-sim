@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "RenderKeyframeWriter.h"
+#include "Recorder.h"
 
 #include "esp/io/JsonSerializeTypes.h"
 #include "esp/io/json.h"
@@ -19,10 +19,12 @@ using namespace rapidjson;
 namespace esp {
 namespace gfx {
 
-// todo: find less bloated way to get deletion notification
+/**
+ * @brief Helper class to get notified when a SceneNode is about to be destroyed.
+ */
 class NodeDeletionHelper : public Magnum::SceneGraph::AbstractFeature3D {
  public:
-  NodeDeletionHelper(scene::SceneNode& node_, RenderKeyframeWriter* writer)
+  NodeDeletionHelper(scene::SceneNode& node_, Recorder* writer)
       : Magnum::SceneGraph::AbstractFeature3D(node_),
         node(&node_),
         writer_(writer) {}
@@ -30,32 +32,25 @@ class NodeDeletionHelper : public Magnum::SceneGraph::AbstractFeature3D {
   virtual ~NodeDeletionHelper() { writer_->onDeleteRenderAssetInstance(node); }
 
  private:
-  RenderKeyframeWriter* writer_ = nullptr;
+  Recorder* writer_ = nullptr;
   const scene::SceneNode* node = nullptr;
 };
 
-RenderKeyframeWriter::~RenderKeyframeWriter() {
+Recorder::~Recorder() {
   // Delete NodeDeletionHelpers. This is important because they hold raw pointers
-  // to this RenderKeyframeWriter and these pointers would become dangling
-  // after this RenderKeyframeWriter is destroyed.
+  // to this Recorder and these pointers would become dangling (invalid)
+  // after this Recorder is destroyed.
   for (auto& instanceRecord : instanceRecords_) {
     delete instanceRecord.deletionHelper;
   }
 }
 
-void RenderKeyframeWriter::onLoadRenderAsset(
+void Recorder::onLoadRenderAsset(
     const esp::assets::AssetInfo& assetInfo) {
-  // todo: store this elsewhere, not per keyframe, and only write those that get
-  // used for render asset instances. For example, we want to avoid writing
-  // render assets used exclusively for collision.
   getKeyframe().loads.push_back(assetInfo);
 }
 
-// hang on to newNode
-// set up persistent name/id for newNode
-// record transforms over time
-// todo: need to know if RGB or semantic graph
-void RenderKeyframeWriter::onCreateRenderAssetInstance(
+void Recorder::onCreateRenderAssetInstance(
     scene::SceneNode* node,
     const esp::assets::RenderAssetInstanceCreationInfo& creation) {
   ASSERT(node);
@@ -69,38 +64,23 @@ void RenderKeyframeWriter::onCreateRenderAssetInstance(
   // We keep a pointer to deletionHelper so we can delete it manually later if necessary.
   NodeDeletionHelper* deletionHelper = new NodeDeletionHelper{*node, this};
 
-  // note: consider FeatureGroup instead of tracking deletionHelpers here
-
   instanceRecords_.emplace_back(
       RenderAssetInstanceRecord{node, instanceKey, Corrade::Containers::NullOpt, deletionHelper});
 }
 
-void RenderKeyframeWriter::saveKeyframe() {
+void Recorder::saveKeyframe() {
   updateInstanceStates();
   advanceKeyframe();
 }
 
-void RenderKeyframeWriter::addUserTransformToKeyframe(
+void Recorder::addUserTransformToKeyframe(
     const std::string& name,
     const Magnum::Vector3& translation,
     const Magnum::Quaternion& rotation) {
   getKeyframe().userTransforms[name] = Transform{translation, rotation};
 }
 
-#if 0  // for reference
-void RenderKeyframeWriter::onDrawObservation(
-    const sensor::VisualSensor& visualSensor) {
-  updateInstanceStates();
-
-  getKeyframe().observation = ObservationRecord{
-      .sensorType = visualSensor.specification()->sensorType,
-      .cameraTransform = visualSensor.node().absoluteTransformationMatrix()};
-
-  advanceKeyframe();
-}
-#endif
-
-void RenderKeyframeWriter::addLoadsCreationsDeletions(
+void Recorder::addLoadsCreationsDeletions(
     RenderKeyframeIterator begin,
     RenderKeyframeIterator end,
     RenderKeyframe* dest) {
@@ -117,7 +97,7 @@ void RenderKeyframeWriter::addLoadsCreationsDeletions(
   }
 }
 
-void RenderKeyframeWriter::checkAndAddDeletion(
+void Recorder::checkAndAddDeletion(
     RenderKeyframe* keyframe,
     RenderAssetInstanceKey instanceKey) {
   auto it =
@@ -133,7 +113,7 @@ void RenderKeyframeWriter::checkAndAddDeletion(
   }
 }
 
-void RenderKeyframeWriter::onDeleteRenderAssetInstance(
+void Recorder::onDeleteRenderAssetInstance(
     const scene::SceneNode* node) {
   int index = findInstance(node);
   ASSERT(index != -1);
@@ -145,15 +125,15 @@ void RenderKeyframeWriter::onDeleteRenderAssetInstance(
   instanceRecords_.erase(instanceRecords_.begin() + index);
 }
 
-RenderKeyframe& RenderKeyframeWriter::getKeyframe() {
+RenderKeyframe& Recorder::getKeyframe() {
   return currKeyframe_;
 }
 
-RenderAssetInstanceKey RenderKeyframeWriter::getNewInstanceKey() {
+RenderAssetInstanceKey Recorder::getNewInstanceKey() {
   return nextInstanceKey_++;
 }
 
-int RenderKeyframeWriter::findInstance(const scene::SceneNode* queryNode) {
+int Recorder::findInstance(const scene::SceneNode* queryNode) {
   auto it = std::find_if(instanceRecords_.begin(), instanceRecords_.end(),
                          [&queryNode](const RenderAssetInstanceRecord& record) {
                            return record.node == queryNode;
@@ -162,7 +142,7 @@ int RenderKeyframeWriter::findInstance(const scene::SceneNode* queryNode) {
   return it == instanceRecords_.end() ? -1 : int(it - instanceRecords_.begin());
 }
 
-RenderAssetInstanceState RenderKeyframeWriter::getInstanceState(
+RenderAssetInstanceState Recorder::getInstanceState(
     const scene::SceneNode* node) {
   const auto absTransformMat = node->absoluteTransformation();
   Transform absTransform{
@@ -174,7 +154,7 @@ RenderAssetInstanceState RenderKeyframeWriter::getInstanceState(
       node->getSemanticId()};
 }
 
-void RenderKeyframeWriter::updateInstanceStates() {
+void Recorder::updateInstanceStates() {
   for (auto& instanceRecord : instanceRecords_) {
     auto state = getInstanceState(instanceRecord.node);
     if (!instanceRecord.recentState || state != instanceRecord.recentState) {
@@ -185,12 +165,12 @@ void RenderKeyframeWriter::updateInstanceStates() {
   }
 }
 
-void RenderKeyframeWriter::advanceKeyframe() {
+void Recorder::advanceKeyframe() {
   savedKeyframes_.emplace_back(std::move(currKeyframe_));
   currKeyframe_ = RenderKeyframe{};
 }
 
-void RenderKeyframeWriter::writeSavedKeyframesToFile(
+void Recorder::writeSavedKeyframesToFile(
     const std::string& filepath) {
   auto document = writeKeyframesToJsonDocument();
   esp::io::writeJsonToFile(document, filepath);
@@ -200,30 +180,11 @@ void RenderKeyframeWriter::writeSavedKeyframesToFile(
                              &getKeyframe());
   savedKeyframes_.clear();
 }
-/*
-struct RenderAssetInstanceCreationInfo {
-  RenderAssetInstanceKey instanceKey;
-  esp::assets::AssetInfo assetInfo;
-  bool isSemantic;
-  bool isRGBD;
-  Magnum::ResourceKey lightSetupKey;
-};
 
-struct RenderAssetInstanceState {
-  Magnum::Matrix4 absTransform;  // todo: Matrix4 or Matrix4x4?
-  // todo: support semanticId per drawable?
-  int semanticId = -1;
-  // todo: support mutable lightSetupKey?
 
-  bool operator==(const RenderAssetInstanceState& rhs) const {
-    return absTransform == rhs.absTransform && semanticId == rhs.semanticId;
-  }
-};
-*/
-
-rapidjson::Document RenderKeyframeWriter::writeKeyframesToJsonDocument() {
+rapidjson::Document Recorder::writeKeyframesToJsonDocument() {
   if (savedKeyframes_.empty()) {
-    // todo: warn about nothing to write
+    LOG(WARNING) << "Recorder::writeKeyframesToJsonDocument: no saved keyframes to write";
     return rapidjson::Document();
   }
 
