@@ -305,17 +305,16 @@ void Simulator::seed(uint32_t newSeed) {
 void Simulator::reconfigureRenderReplayManager() {
   renderReplayMgr_ = std::make_shared<gfx::RenderReplayManager>();
 
-  renderReplayMgr_->setWriter(config_.enableRenderReplaySave
-                              ? std::make_shared<gfx::RenderKeyframeWriter>()
-                              : nullptr);
+  renderReplayMgr_->setWriter(
+      config_.enableRenderReplaySave
+          ? std::make_shared<gfx::RenderKeyframeWriter>()
+          : nullptr);
   ASSERT(resourceManager_);
   resourceManager_->setRenderKeyframeWriter(renderReplayMgr_->getWriter());
 
-  renderReplayMgr_->setReader(
-      std::make_shared<esp::gfx::RenderKeyframeReader>(std::bind(
-          &esp::sim::Simulator::loadAndAddRenderAssetInstance, this,
-          std::placeholders::_1, std::placeholders::_2)));
-
+  renderReplayMgr_->setReader(std::make_shared<esp::gfx::RenderKeyframeReader>(
+      std::bind(&esp::sim::Simulator::loadAndCreateRenderAssetInstance, this,
+                std::placeholders::_1, std::placeholders::_2)));
 }
 
 scene::SceneGraph& Simulator::getActiveSceneGraph() {
@@ -806,14 +805,13 @@ void Simulator::sampleRandomAgentState(agent::AgentState& agentState) {
   }
 }
 
-scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+scene::SceneNode* Simulator::loadAndCreateRenderAssetInstance(
     const assets::AssetInfo& assetInfo,
     const assets::RenderAssetInstanceCreationInfo& creation) {
   std::vector<int> tempIDs{activeSceneID_, activeSemanticSceneID_};
-  return resourceManager_->loadAndAddRenderAssetInstance(
+  return resourceManager_->loadAndCreateRenderAssetInstance(
       assetInfo, creation, sceneManager_.get(), tempIDs);
 }
-
 
 agent::Agent::ptr Simulator::addAgent(
     const agent::AgentConfiguration& agentConfig,
@@ -989,7 +987,7 @@ void Simulator::setObjectLightSetup(const int objectID,
 }
 
 #if 0  // for reference; deleteme
-scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
+scene::SceneNode* Simulator::loadAndCreateRenderAssetInstance(
     const esp::assets::RenderAssetInstanceCreationInfo& creation) {
 
   if (creation.isRGBD && creation.isSemantic) {
@@ -1004,7 +1002,7 @@ scene::SceneNode* Simulator::loadAndAddRenderAssetInstance(
 
   auto& graph = sceneManager_->getSceneGraph(sceneId);
 
-  return resourceManager_->loadAndAddRenderAssetInstance(
+  return resourceManager_->loadAndCreateRenderAssetInstance(
     creation, graph);
 
 }

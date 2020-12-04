@@ -1812,7 +1812,7 @@ bool ResourceManager::instantiateAssetsOnDemand(
   return true;
 }  // ResourceManager::instantiateAssetsOnDemand
 
-scene::SceneNode* ResourceManager::loadAndAddRenderAssetInstance(
+scene::SceneNode* ResourceManager::loadAndCreateRenderAssetInstance(
     const AssetInfo& assetInfo,
     const RenderAssetInstanceCreationInfo& creation,
     esp::scene::SceneManager* sceneManagerPtr,

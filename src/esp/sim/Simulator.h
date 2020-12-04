@@ -73,7 +73,9 @@ class Simulator {
   scene::SceneGraph& getActiveSceneGraph();
   scene::SceneGraph& getActiveSemanticSceneGraph();
 
-  std::shared_ptr<gfx::RenderReplayManager> getRenderReplayManager() { return renderReplayMgr_; }
+  std::shared_ptr<gfx::RenderReplayManager> getRenderReplayManager() {
+    return renderReplayMgr_;
+  }
 
   void saveFrame(const std::string& filename);
 
@@ -833,7 +835,7 @@ class Simulator {
     metadataMediator_ = _metadataMediator;
   }
 
-  scene::SceneNode* loadAndAddRenderAssetInstance(
+  scene::SceneNode* loadAndCreateRenderAssetInstance(
       const assets::AssetInfo& assetInfo,
       const assets::RenderAssetInstanceCreationInfo& creation);
 

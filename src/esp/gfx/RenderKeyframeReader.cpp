@@ -102,8 +102,8 @@ void RenderKeyframeReader::readKeyframesFromJsonDocument(const Document& d) {
 }
 
 RenderKeyframeReader::RenderKeyframeReader(
-    const LoadAndAddRenderAssetInstanceCallback& callback)
-    : loadAndAddRenderAssetInstanceCallback(callback) {}
+    const LoadAndCreateRenderAssetInstanceCallback& callback)
+    : loadAndCreateRenderAssetInstanceCallback(callback) {}
 
 void RenderKeyframeReader::readKeyframesFromFile(const std::string& filepath) {
   clearFrame();
@@ -135,8 +135,8 @@ void RenderKeyframeReader::setFrame(int frameIndex) {
 }
 
 bool RenderKeyframeReader::getUserTransform(const std::string& name,
-                              Magnum::Vector3* translation,
-                              Magnum::Quaternion* rotation) {
+                                            Magnum::Vector3* translation,
+                                            Magnum::Quaternion* rotation) {
   ASSERT(frameIndex_ >= 0 && frameIndex_ < getNumFrames());
   ASSERT(translation);
   ASSERT(rotation);
@@ -150,7 +150,6 @@ bool RenderKeyframeReader::getUserTransform(const std::string& name,
     return false;
   }
 }
-
 
 void RenderKeyframeReader::clearFrame() {
   for (const auto& pair : createdInstances_) {
@@ -174,17 +173,19 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
     const auto& creation = pair.second;
     if (!assetInfos_.count(creation.filepath)) {
       if (!failedFilepaths_.count(creation.filepath)) {
-        LOG(WARNING) << "RenderKeyframeReader: missing asset info for [" << creation.filepath << "]";
+        LOG(WARNING) << "RenderKeyframeReader: missing asset info for ["
+                     << creation.filepath << "]";
         failedFilepaths_.insert(creation.filepath);
       }
       continue;
     }
     ASSERT(assetInfos_.count(creation.filepath));
-    auto node = loadAndAddRenderAssetInstanceCallback(
+    auto node = loadAndCreateRenderAssetInstanceCallback(
         assetInfos_[creation.filepath], creation);
     if (!node) {
       if (!failedFilepaths_.count(creation.filepath)) {
-        LOG(WARNING) << "RenderKeyframeReader: load failed for asset [" << creation.filepath << "]";
+        LOG(WARNING) << "RenderKeyframeReader: load failed for asset ["
+                     << creation.filepath << "]";
         failedFilepaths_.insert(creation.filepath);
       }
       continue;
@@ -198,7 +199,8 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
   for (const auto& deletionInstanceKey : keyframe.deletions) {
     const auto& it = createdInstances_.find(deletionInstanceKey);
     if (it == createdInstances_.end()) {
-      // missing instance for this key, probably due to a failed instance creation
+      // missing instance for this key, probably due to a failed instance
+      // creation
       continue;
     }
 
@@ -210,7 +212,8 @@ void RenderKeyframeReader::applyKeyframe(const RenderKeyframe& keyframe) {
   for (const auto& pair : keyframe.stateUpdates) {
     const auto& it = createdInstances_.find(pair.first);
     if (it == createdInstances_.end()) {
-      // missing instance for this key, probably due to a failed instance creation
+      // missing instance for this key, probably due to a failed instance
+      // creation
       continue;
     }
     auto node = it->second;

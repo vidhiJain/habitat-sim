@@ -499,7 +499,7 @@ class ResourceManager {
   }
 
   // returns nullptr if load failure
-  scene::SceneNode* loadAndAddRenderAssetInstance(
+  scene::SceneNode* loadAndCreateRenderAssetInstance(
       const AssetInfo& assetInfo,
       const RenderAssetInstanceCreationInfo& creation,
       esp::scene::SceneManager* sceneManagerPtr,

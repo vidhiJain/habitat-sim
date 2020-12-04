@@ -21,12 +21,13 @@ namespace gfx {
 
 class RenderKeyframeReader {
  public:
-  using LoadAndAddRenderAssetInstanceCallback =
+  using LoadAndCreateRenderAssetInstanceCallback =
       std::function<esp::scene::SceneNode*(
           const esp::assets::AssetInfo&,
           const esp::assets::RenderAssetInstanceCreationInfo&)>;
 
-  RenderKeyframeReader(const LoadAndAddRenderAssetInstanceCallback& callback);
+  RenderKeyframeReader(
+      const LoadAndCreateRenderAssetInstanceCallback& callback);
 
   void readKeyframesFromFile(const std::string& filepath);
   void readKeyframesFromJsonDocument(const rapidjson::Document& d);
@@ -37,14 +38,15 @@ class RenderKeyframeReader {
   void setFrame(int frameIndex);
 
   bool getUserTransform(const std::string& name,
-                               Magnum::Vector3* translation,
-                               Magnum::Quaternion* rotation);
+                        Magnum::Vector3* translation,
+                        Magnum::Quaternion* rotation);
 
  private:
   void clearFrame();  // todo: better name for setting to frame -1
   void applyKeyframe(const RenderKeyframe& keyframe);
 
-  LoadAndAddRenderAssetInstanceCallback loadAndAddRenderAssetInstanceCallback;
+  LoadAndCreateRenderAssetInstanceCallback
+      loadAndCreateRenderAssetInstanceCallback;
   int frameIndex_ = -1;
   std::vector<RenderKeyframe> keyframes_;
   std::map<std::string, esp::assets::AssetInfo> assetInfos_;

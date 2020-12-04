@@ -502,8 +502,8 @@ Viewer::Viewer(const Arguments& arguments)
 
   renderKeyframeReader_ =
       std::make_unique<esp::gfx::RenderKeyframeReader>(std::bind(
-          &esp::sim::Simulator::loadAndAddRenderAssetInstance, simulator_.get(),
-          std::placeholders::_1, std::placeholders::_2));
+          &esp::sim::Simulator::loadAndCreateRenderAssetInstance,
+          simulator_.get(), std::placeholders::_1, std::placeholders::_2));
 
   timeline_.start();
 
