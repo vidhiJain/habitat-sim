@@ -1,6 +1,16 @@
 add_library(
   io STATIC
-  io.cpp io.h json.cpp json.h
+  io.cpp
+  io.h
+  json.cpp
+  json.h
+  JsonAllTypes.h
+  JsonBuiltinTypes.h
+  JsonBuiltinTypes.hpp
+  JsonEspTypes.cpp
+  JsonEspTypes.h
+  JsonMagnumTypes.h
+  JsonStlTypes.h
 )
 
 target_link_libraries(
