@@ -228,7 +228,7 @@ if __name__ == "__main__":
     # %%
     # @title Play replays.
 
-    if False:
+    if True:
         # use same agents/sensors from earlier, with different backend config
         playback_cfg = habitat_sim.Configuration(
             # gfx_replay_utils.make_backend_configuration_for_playback(need_separate_semantic_scene_graph=True),
