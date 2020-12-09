@@ -58,7 +58,7 @@ int PhysicsManager::addContactTestObject(
     const std::string& configFileHandle,
     scene::SceneNode* attachmentNode,
     DrawableGroup* drawables,
-    const Magnum::ResourceKey& lightSetup) {
+    const std::string& lightSetup) {
   if (contactTestObjects_.count(configFileHandle) > 0) {
     return ID_UNDEFINED;
   }
