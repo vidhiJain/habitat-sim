@@ -254,11 +254,15 @@ class Simulator(SimulatorBackend):
         self._last_state = agent.state
         return agent
 
-    def get_sensor_observations(self) -> Dict[str, Union[ndarray, "Tensor"]]:
+    def get_sensor_observations(
+        self, draw_crosshair=False
+    ) -> Dict[str, Union[ndarray, "Tensor"]]:
         # to handle case of rendering cross hair
-        for _, sensor in self._sensors.items():
-            sensor.draw_observation(self.render_to_ui)
-        self.update_cross_hair()
+        if draw_crosshair:
+            for _, sensor in self._sensors.items():
+                sensor.draw_observation(self.render_to_ui)
+            self.update_cross_hair()
+
         for _, sensor in self._sensors.items():
             sensor.draw_observation(self.render_to_ui)
 
