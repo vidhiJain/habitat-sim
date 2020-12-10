@@ -25,6 +25,7 @@
 
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/Player.h"
 #include "esp/nav/PathFinder.h"
 #include "esp/scene/ObjectControls.h"
 #include "esp/scene/SceneNode.h"
@@ -318,6 +319,8 @@ Key Commands:
   std::unique_ptr<ObjectPickingHelper> objectPickingHelper_;
   // returns the number of visible drawables (meshVisualizer drawables are not
   // included)
+
+  std::unique_ptr<esp::gfx::replay::Player> replayPlayer_;
 };
 
 Viewer::Viewer(const Arguments& arguments)
@@ -490,6 +493,10 @@ Viewer::Viewer(const Arguments& arguments)
       Mn::SceneGraph::AspectRatioPolicy::Extend);
   defaultAgent_ = simulator_->getAgent(defaultAgentId_);
   agentBodyNode_ = &defaultAgent_->node();
+
+  replayPlayer_ = std::make_unique<esp::gfx::replay::Player>(std::bind(
+      &esp::sim::Simulator::loadAndCreateRenderAssetInstance, simulator_.get(),
+      std::placeholders::_1, std::placeholders::_2));
 
   objectPickingHelper_ = std::make_unique<ObjectPickingHelper>(viewportSize);
   timeline_.start();
@@ -910,10 +917,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       simulating_ = !simulating_;
       Mn::Debug{} << " Physics Simulation: " << simulating_;
       break;
+#if 0  // temp disable
     case KeyEvent::Key::Period:
       // also `>` key
       simulateSingleStep_ = true;
       break;
+#endif
       // ==== Look direction and Movement ====
     case KeyEvent::Key::Left:
       defaultAgent_->act("turnLeft");
@@ -1041,6 +1050,21 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::V:
       invertGravity();
       break;
+#if 1
+    case KeyEvent::Key::M:
+      replayPlayer_->readKeyframesFromFile(
+          "/home/eundersander/Dropbox/scripts/my_replay_apt0.json");
+      break;
+    case KeyEvent::Key::Comma:
+      replayPlayer_->setKeyframeIndex(
+          std::max(replayPlayer_->getKeyframeIndex() - 1, 0));
+      break;
+    case KeyEvent::Key::Period:
+      replayPlayer_->setKeyframeIndex(
+          std::min(replayPlayer_->getKeyframeIndex() + 1,
+                   replayPlayer_->getNumKeyframes() - 1));
+      break;
+#endif
     default:
       break;
   }

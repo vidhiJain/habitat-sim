@@ -2,7 +2,7 @@
 # jupyter:
 #   accelerator: GPU
 #   colab:
-#     name: Replay Tutorial
+#     name: Replay Tutorial WIP
 #     provenance: []
 #   jupytext:
 #     cell_metadata_filter: -all
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     sim = None
     random.seed(0)
     replay_filepaths = []
-    num_episodes = 1
+    num_episodes = 3
 
     for episode_index in range(num_episodes):
         episodeName = "episode{}".format(episode_index)
@@ -254,25 +254,25 @@ if __name__ == "__main__":
 
         observations = []
 
-        # play replay #0
+        print("play replay #0...")
         for frame in range(players[0].get_num_keyframes()):
             players[0].set_keyframe_index(frame)
             gfx_replay_utils.set_agent_from_user_transform(players[0], sim)
             observations.append(sim.get_sensor_observations())
 
-        # play in reverse
+        print("play in reverse...")
         for frame in range(players[0].get_num_keyframes() - 2, -1, -1):
             players[0].set_keyframe_index(frame)
-            gfx_replay_utils.set_agent_from_user_transform(player, sim)
+            gfx_replay_utils.set_agent_from_user_transform(players[0], sim)
             observations.append(sim.get_sensor_observations())
 
-        # play forward from different camera view
+        print("play from a different camera view...")
         agent.body.object.translation = [-1.6, -1.1, 0.2]
         for frame in range(players[0].get_num_keyframes()):
             players[0].set_keyframe_index(frame)
             observations.append(sim.get_sensor_observations())
 
-        # play all replays together
+        print("play all {} replays together...".format(num_episodes))
         for frame in range(players[0].get_num_keyframes()):
             for player in players:
                 player.set_keyframe_index(frame)
