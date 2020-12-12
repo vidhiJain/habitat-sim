@@ -27,7 +27,7 @@ export const defaultEpisode = {
   goal: defaultGoal
 };
 
-export const defaultResolution = { height: 480, width: 640 };
+export const defaultResolution = { height: 600, width: 800 };
 
 export const defaultScene =
   window.location.href.indexOf("localhost") === -1

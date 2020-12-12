@@ -141,12 +141,12 @@ class WebDemo {
       {
         uuid: "rgb",
         sensorType: Module.SensorType.COLOR,
-        resolution: [480, 640]
+        resolution: [600, 800]
       },
       {
         uuid: "semantic",
         sensorType: Module.SensorType.SEMANTIC,
-        resolution: [480, 640],
+        resolution: [600, 800],
         channels: 1
       }
     ];
