@@ -9,6 +9,8 @@ namespace em = emscripten;
 #include "esp/gfx/magnum.h"
 #include "esp/scene/SemanticScene.h"
 #include "esp/sim/Simulator.h"
+#include "esp/gfx/replay/ReplayManager.h"
+#include "esp/gfx/replay/Player.h"
 
 using namespace esp;
 using namespace esp::agent;
@@ -16,6 +18,7 @@ using namespace esp::assets;
 using namespace esp::core;
 using namespace esp::geo;
 using namespace esp::gfx;
+using namespace esp::gfx::replay;
 using namespace esp::nav;
 using namespace esp::physics;
 using namespace esp::scene;
@@ -281,6 +284,7 @@ EMSCRIPTEN_BINDINGS(habitat_sim_bindings_js) {
       .property("gpuDeviceId", &SimulatorConfiguration::gpuDeviceId)
       .property("compressTextures", &SimulatorConfiguration::compressTextures)
       .property("enablePhysics", &SimulatorConfiguration::enablePhysics)
+      .property("enableGfxReplaySave", &SimulatorConfiguration::enableGfxReplaySave)
       .property("physicsConfigFile",
                 &SimulatorConfiguration::physicsConfigFile);
 
@@ -348,10 +352,49 @@ EMSCRIPTEN_BINDINGS(habitat_sim_bindings_js) {
       .property("controllingAngVel", &VelocityControl::controllingAngVel)
       .property("angVelIsLocal", &VelocityControl::angVelIsLocal);
 
+  em::class_<Player>("Player")
+      .smart_ptr<Player::ptr>("Player::ptr")
+      .function("get_num_keyframes", &Player::getNumKeyframes)
+      .function("set_keyframe_index", &Player::setKeyframeIndex)
+      .function("get_keyframe_index", &Player::getKeyframeIndex);
+
+  em::class_<ReplayManager>("ReplayManager")
+      .smart_ptr<ReplayManager::ptr>("ReplayManager::ptr")
+      .function(
+          "save_keyframe", // todo: decide naming convention
+          em::optional_override([](ReplayManager& self) {
+            if (!self.getRecorder()) {
+              LOG(ERROR) << "save_keyframe: not enabled. See "
+                            "SimulatorConfiguration::enableGfxReplaySave.";
+              CORRADE_INTERNAL_ASSERT_UNREACHABLE(); // temp
+              return;
+            }
+            self.getRecorder()->saveKeyframe();
+          }))
+      .function(
+          "writeSavedKeyframesToString",
+          em::optional_override([](ReplayManager& self) {
+            if (!self.getRecorder()) {
+              LOG(ERROR) << "writeSavedKeyframesToString: not enabled. See "
+                            "SimulatorConfiguration::enableGfxReplaySave.";
+              CORRADE_INTERNAL_ASSERT_UNREACHABLE(); // temp
+              return std::string();
+            }
+            return self.getRecorder()->writeSavedKeyframesToString();
+          }))
+      .function("readKeyframesFromFile", &ReplayManager::readKeyframesFromFile);
+      // .function(
+      //     "readKeyframesFromFile",
+      //     em::optional_override([](ReplayManager& self, const std::string& filepath) {
+      //       return self.readKeyframesFromFile(filepath);
+      //     }));
+
+
   em::class_<Simulator>("Simulator")
       .smart_ptr_constructor("Simulator",
                              &Simulator::create<const SimulatorConfiguration&>)
       .function("getSemanticScene", &Simulator::getSemanticScene)
+      .function("getGfxReplayManager", &Simulator::getGfxReplayManager)
       .function("seed", &Simulator::seed)
       .function("reconfigure", &Simulator::reconfigure)
       .function("reset", &Simulator::reset)

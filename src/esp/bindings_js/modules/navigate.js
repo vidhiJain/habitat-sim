@@ -118,6 +118,58 @@ class NavigateTask {
     });
     this.initialized = true;
     this.initPhysics();
+
+    this.frameCounter = 0;
+    this.replayStepFunction = setInterval(() => {
+      if (this.player) {
+        // run replay at half framerate
+        if (this.frameCounter % 2 == 0) {
+          var currIndex = this.player.get_keyframe_index();
+          var newIndex =
+            currIndex == this.player.get_num_keyframes() - 1
+              ? 0
+              : currIndex + 1;
+          this.player.set_keyframe_index(newIndex);
+        }
+      }
+
+      if (this.currentAction) {
+        this.handleAction(this.currentAction);
+      }
+
+      this.render();
+
+      this.frameCounter += 1;
+    }, 1000.0 / 60);
+
+    this.numRendersSinceLastUpdate = 0;
+    this.updateFpsFunction = setInterval(() => {
+      var duration;
+      var fps_desc;
+      if (window.performance.now) {
+        var timestamp = window.performance.now();
+        if (this.lastTimestamp) {
+          duration = (timestamp - this.lastTimestamp) / 1000.0;
+        }
+        this.lastTimestamp = timestamp;
+        fps_desc = "FPS";
+      } else {
+        duration = 0.5;
+        fps_desc = "APPROX FPS";
+      }
+
+      this.components.fps.innerHTML =
+        fps_desc +
+        " " +
+        (this.numRendersSinceLastUpdate / duration).toFixed(1).toString();
+      this.numRendersSinceLastUpdate = 0;
+    }, 500.0);
+
+    var filepath = "data/gfx_replay1.json";
+    this.player = this.sim.sim
+      .getGfxReplayManager()
+      .readKeyframesFromFile(filepath);
+    this.player.set_keyframe_index(0);
   }
 
   initPhysics() {
@@ -132,8 +184,6 @@ class NavigateTask {
         let startTime = new Date().getTime();
         // Step world physics
         this.sim.stepWorld(stepSize);
-        // Render observation
-        this.render();
 
         // Log current state for replay
         let agentState = this.sim.getAgentPose();
@@ -405,6 +455,9 @@ class NavigateTask {
     this.renderImage();
     this.renderSemanticImage();
     this.renderTopDown(options);
+
+    // this.sim.sim.getGfxReplayManager().save_keyframe();
+    this.numRendersSinceLastUpdate += 1;
   }
 
   handleInventoryUpdate(isCollision) {
@@ -461,8 +514,11 @@ class NavigateTask {
       this.handleInventoryUpdate(data["collision"]);
       this.inventory.renderInventory();
       actionData = data;
+      this.currentAction = null;
     } else if (action == "agentPose") {
-      this.sim.getAgentPose();
+      var pose = this.sim.getAgentPose();
+      console.log("agent translation: " + pose.position);
+      console.log("agent rotation: " + pose.rotation);
     } else {
       collision = this.sim.step(action);
       this.setStatus(action);
@@ -490,16 +546,39 @@ class NavigateTask {
       agentState: agentState,
       objectStates: objectStates
     });
-    this.render();
+    // temp disable this.render();
+  }
+
+  handleKeypressUp() {
+    this.currentAction = null;
   }
 
   handleKeypress(key) {
     for (let a of this.actions) {
       if (a.keyCode === key) {
-        this.handleAction(a.name);
+        // this.handleAction(a.name);
+        this.currentAction = a.name;
         break;
       }
     }
+
+    // if (key == 82) {
+    //   // r
+    //   console.log("printing replay...");
+    //   console.log(
+    //     this.sim.sim.getGfxReplayManager().writeSavedKeyframesToString()
+    //   );
+    //   console.log("done");
+    // }
+
+    // if (key == 80) {
+    //   // p
+    //   var filepath = "data/gfx_replay1.json";
+    //   this.player = this.sim.sim
+    //     .getGfxReplayManager()
+    //     .readKeyframesFromFile(filepath);
+    //   this.player.set_keyframe_index(0);
+    // }
   }
 
   bindKeys() {
@@ -513,6 +592,12 @@ class NavigateTask {
       _self.handleKeypress(event.keyCode);
     };
     document.addEventListener("keydown", _self.keyBindListener, true);
+
+    _self.keyBindListener2 = function(event) {
+      event.preventDefault();
+      _self.handleKeypressUp(event.keyCode);
+    };
+    document.addEventListener("keyup", _self.keyBindListener2, true);
   }
 
   unbindKeys() {

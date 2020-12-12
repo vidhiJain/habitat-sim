@@ -46,6 +46,14 @@ function preloadPhysConfig(url) {
   }
   FS.createPreloadedFile(emDataHome, file, dataHome.concat(url), true, false);
 
+  FS.createPreloadedFile(
+    emDataHome,
+    "gfx_replay1.json",
+    dataHome.concat("gfx_replay1.json"),
+    true,
+    false
+  );
+
   let emObjHome = emDataHome.concat("/objects");
   FS.mkdir(emObjHome);
 

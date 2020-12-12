@@ -25,6 +25,8 @@
 
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/ReplayManager.h"
+#include "esp/gfx/replay/Recorder.h"
 #include "esp/nav/PathFinder.h"
 #include "esp/scene/ObjectControls.h"
 #include "esp/scene/SceneNode.h"
@@ -392,6 +394,7 @@ Viewer::Viewer(const Arguments& arguments)
   simConfig.enablePhysics = useBullet;
   simConfig.frustumCulling = true;
   simConfig.requiresTextures = true;
+  simConfig.enableGfxReplaySave = true;
   if (args.isSet("stage-requires-lighting")) {
     Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
     simConfig.sceneLightSetup =
@@ -675,6 +678,11 @@ void Viewer::drawEvent() {
     simulator_->stepWorld(1.0 / 60.0);
     timeSinceLastSimulation = 0.0;
     simulateSingleStep_ = false;
+    static int counter = 0;
+    if (++counter == 1) {
+      simulator_->getGfxReplayManager()->getRecorder()->saveKeyframe();
+      counter = 0;
+    }
   }
 
   // using polygon offset to increase mesh depth to a avoid z-fighting with
@@ -906,6 +914,9 @@ void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
 void Viewer::keyPressEvent(KeyEvent& event) {
   const auto key = event.key();
   switch (key) {
+    case KeyEvent::Key::R:
+      simulator_->getGfxReplayManager()->getRecorder()->writeSavedKeyframesToFile("viewer_replay_60hz.json");
+      break;
     case KeyEvent::Key::Esc:
       std::exit(0);
       break;

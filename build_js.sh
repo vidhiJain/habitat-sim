@@ -36,7 +36,7 @@ cmake ../src \
     -DBUILD_ASSIMP_SUPPORT=OFF \
     -DBUILD_DATATOOL=OFF \
     -DBUILD_PTEX_SUPPORT=OFF \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_PREFIX_PATH="$EMSCRIPTEN" \
     -DCMAKE_TOOLCHAIN_FILE="../src/deps/corrade/toolchains/generic/Emscripten-wasm.cmake" \
     -DCMAKE_INSTALL_PREFIX="." \

@@ -32,6 +32,7 @@ class WebDemo {
     this.config.scene_id = Module.scene;
     this.config.enablePhysics = Module.enablePhysics;
     this.config.physicsConfigFile = Module.physicsConfigFile;
+    this.config.enableGfxReplaySave = false;
 
     this.simenv = new SimEnv(this.config, episode, 0);
 
@@ -60,6 +61,7 @@ class WebDemo {
       radar: document.getElementById("radar"),
       scope: document.getElementById("scope"),
       status: document.getElementById("status"),
+      fps: document.getElementById("fps"),
       taskValidator: this.taskValidator
     });
   }

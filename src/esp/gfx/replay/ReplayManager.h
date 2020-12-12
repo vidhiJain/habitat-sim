@@ -20,6 +20,7 @@ namespace replay {
  */
 class ReplayManager {
  public:
+
   /**
    * @brief Optionally make a Recorder instance available to python, or pass
    * nullptr.

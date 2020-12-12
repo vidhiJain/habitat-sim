@@ -51,6 +51,9 @@ class Player {
    */
   Player(const LoadAndCreateRenderAssetInstanceCallback& callback);
 
+  Player() = default; // needed for js binding
+  Player(const Player& rhs) = default; // needed for js binding
+
   /**
    * @brief Read keyframes. See also @ref Recorder::writeSavedKeyframesToFile.
    * After calling this, use @ref setKeyframeIndex to set a keyframe.

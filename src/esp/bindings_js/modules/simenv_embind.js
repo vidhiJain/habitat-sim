@@ -78,6 +78,11 @@ class SimEnv {
     this.objectsInScene = [];
 
     if (Object.keys(episode).length > 0) {
+      episode.startState = {
+        position: [-7.542691230773926, -0.2089587301015854, -4.806755542755127],
+        rotation: [0, 0.9353029727935791, 0, -0.35384809970855713]
+      };
+
       this.initialAgentState = this.createAgentState(episode.startState);
       // add agent object for collision test
       this.sim.addContactTestObject(this.agentObjectHandle, 0);
@@ -741,7 +746,7 @@ class SimEnv {
   }
 
   isAgentColliding(action, agentTransform) {
-    let stepSize = 0.25;
+    let stepSize = 0.044; // see Agent.h
     if (action == "moveForward") {
       let position = agentTransform.backward().mul(-1 * stepSize);
       let newPosition = agentTransform.translation().add(position);
