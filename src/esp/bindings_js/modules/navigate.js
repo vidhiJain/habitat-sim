@@ -133,8 +133,8 @@ class NavigateTask {
         }
       }
 
-      if (this.currentAction) {
-        this.handleAction(this.currentAction);
+      for (let action of this.activeActions) {
+        this.handleAction(action);
       }
 
       this.render();
@@ -170,6 +170,8 @@ class NavigateTask {
       .getGfxReplayManager()
       .readKeyframesFromFile(filepath);
     this.player.set_keyframe_index(0);
+
+    this.activeActions = [];
   }
 
   initPhysics() {
@@ -500,6 +502,13 @@ class NavigateTask {
     return this.taskValidator.validate();
   }
 
+  removeActiveAction(action) {
+    const index = this.activeActions.indexOf(action);
+    if (index > -1) {
+      this.activeActions.splice(index, 1);
+    }
+  }
+
   handleAction(action) {
     let actionData = {};
     let collision = false;
@@ -514,7 +523,7 @@ class NavigateTask {
       this.handleInventoryUpdate(data["collision"]);
       this.inventory.renderInventory();
       actionData = data;
-      this.currentAction = null;
+      this.removeActiveAction(action);
     } else if (action == "agentPose") {
       var pose = this.sim.getAgentPose();
       console.log("agent translation: " + pose.position);
@@ -549,15 +558,22 @@ class NavigateTask {
     // temp disable this.render();
   }
 
-  handleKeypressUp() {
-    this.currentAction = null;
+  handleKeypressUp(key) {
+    for (let a of this.actions) {
+      if (a.keyCode === key) {
+        this.removeActiveAction(a.name);
+        break;
+      }
+    }
   }
 
   handleKeypress(key) {
     for (let a of this.actions) {
       if (a.keyCode === key) {
-        // this.handleAction(a.name);
-        this.currentAction = a.name;
+        const index = this.activeActions.indexOf(a.name);
+        if (index == -1) {
+          this.activeActions.push(a.name);
+        }
         break;
       }
     }
