@@ -7,15 +7,7 @@ import magnum as mn
 import habitat_sim
 
 
-def add_agent_user_transform(sim):
-    agent = sim.get_agent(0)
-    sim.gfx_replay_manager.add_user_transform_to_keyframe(
-        "agent", agent.body.object.translation, agent.body.object.rotation
-    )
-
-
 def add_node_user_transform(sim, node, name):
-
     translation = node.absolute_translation
     rot = mn.Quaternion(mn.Quaterniond(node.rotation))
     while True:
@@ -27,7 +19,6 @@ def add_node_user_transform(sim, node, name):
         except AttributeError:
             # scene root has no rotation attribute
             break
-
     sim.gfx_replay_manager.add_user_transform_to_keyframe(name, translation, rot)
 
 

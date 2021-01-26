@@ -27,7 +27,6 @@
 # @markdown (double click to show code)
 # %cd /content/habitat-sim
 import os
-import random
 import sys
 
 import git
@@ -53,6 +52,11 @@ def remove_all_objects(sim):
         sim.remove_object(id_)
 
 
+# %%
+# @title Configure sim, including enable_gfx_replay_save flag.
+# @markdown This flag is required in order to use the gfx replay recording API.
+
+
 def make_configuration():
     # simulator configuration
     backend_cfg = habitat_sim.SimulatorConfiguration()
@@ -66,23 +70,17 @@ def make_configuration():
     # below.
     backend_cfg.enable_gfx_replay_save = True
 
-    # sensor configuration
-    sensor_specs = []
-    sensor_spec = habitat_sim.SensorSpec()
-    sensor_spec.uuid = "rgba_camera_1stperson"
-    sensor_spec.sensor_type = habitat_sim.SensorType.COLOR
-    sensor_spec.resolution = [544, 720]
-    sensor_specs.append(sensor_spec)
-
-    # agent configuration
+    sensor_cfg = habitat_sim.SensorSpec()
+    sensor_cfg.resolution = [544, 720]
     agent_cfg = habitat_sim.agent.AgentConfiguration()
-    agent_cfg.sensor_specifications = sensor_specs
+    agent_cfg.sensor_specifications = [sensor_cfg]
 
     return habitat_sim.Configuration(backend_cfg, [agent_cfg])
 
 
 # %%
 # @title Helper function to move our agent, step physics, and showcase the replay recording API.
+# @markdown Note calls to gfx_replay_utils.add_node_user_transform and sim.gfx_replay_manager.save_keyframe().
 
 
 def simulate_with_moving_agent(
@@ -92,7 +90,7 @@ def simulate_with_moving_agent(
     look_rotation_vel=0.0,
     get_frames=True,
 ):
-    sensor_node = sim._sensors["rgba_camera_1stperson"]._sensor_object.object
+    sensor_node = sim._sensors["rgba_camera"]._sensor_object.object
     agent_node = sim.get_agent(0).body.object
 
     # simulate dt seconds at 60Hz to the nearest fixed timestep
@@ -128,8 +126,9 @@ def simulate_with_moving_agent(
 
     return observations
 
+
 # %%
-# @title More setup
+# @title More tutorial setup
 
 if __name__ == "__main__":
     import argparse
@@ -146,268 +145,264 @@ if __name__ == "__main__":
 
     cfg = make_configuration()
     sim = None
-    random.seed(0)
-    replay_filepaths = []
-    num_episodes = 1
+    replay_filepath = output_path + "replay.json"
 
-    for episode_index in range(num_episodes):
-        episodeName = "episode{}".format(episode_index)
-        replay_filepath = output_path + episodeName + ".json"
-        replay_filepaths.append(replay_filepath)
+    if not sim:
+        sim = habitat_sim.Simulator(cfg)
+    else:
+        sim.reconfigure(cfg)
+
+    agent_state = habitat_sim.AgentState()
+    agent = sim.initialize_agent(0, agent_state)
 
     # %%
-    # @title Run three episodes. Save videos and replays.
+    # @title Initial placement for agent and sensor
 
-    for episode_index in range(num_episodes):
+    agent_node = sim.get_agent(0).body.object
+    sensor_node = sim._sensors["rgba_camera"]._sensor_object.object
 
-        if not sim:
-            sim = habitat_sim.Simulator(cfg)
-        else:
-            sim.reconfigure(cfg)
+    # initial agent transform
+    agent_node.translation = [-0.15, -1.5, 1.0]
+    agent_node.rotation = mn.Quaternion.rotation(mn.Deg(-75), mn.Vector3(0.0, 1.0, 0))
 
-        agent_state = habitat_sim.AgentState()
-        agent = sim.initialize_agent(0, agent_state)
+    # initial sensor local transform (relative to agent)
+    sensor_node.translation = [0.0, 0.6, 0.0]
+    sensor_node.rotation = mn.Quaternion.rotation(mn.Deg(-15), mn.Vector3(1.0, 0.0, 0))
 
-        agent_node = sim.get_agent(0).body.object
-        sensor_node = sim._sensors["rgba_camera_1stperson"]._sensor_object.object
+    # %%
+    # @title Start an episode by moving an agent in the scene and capturing observations.
 
-        # initial agent transform
-        agent_node.translation = [-0.15, -1.5, 1.0]
-        agent_node.rotation = mn.Quaternion.rotation(
-            mn.Deg(-75), mn.Vector3(0.0, 1.0, 0)
+    observations = []
+
+    # simulate with empty scene
+    observations += simulate_with_moving_agent(
+        sim,
+        duration=1.0,
+        agent_vel=np.array([0.5, 0.0, 0.0]),
+        look_rotation_vel=25.0,
+        get_frames=make_video,
+    )
+
+    # %%
+    # @title Continue the episode by adding and simulating objects.
+
+    obj_templates_mgr = sim.get_object_template_manager()
+
+    obj_templates_mgr.load_configs(str(os.path.join(data_path, "objects")))
+    chefcan_template_handle = obj_templates_mgr.get_template_handles(
+        "data/objects/chefcan"
+    )[0]
+
+    # drop some dynamic objects
+    id_1 = sim.add_object_by_handle(chefcan_template_handle)
+    sim.set_translation(np.array([2.4, -0.64, 0]), id_1)
+    id_2 = sim.add_object_by_handle(chefcan_template_handle)
+    sim.set_translation(np.array([2.4, -0.64, 0.28]), id_2)
+    id_3 = sim.add_object_by_handle(chefcan_template_handle)
+    sim.set_translation(np.array([2.4, -0.64, -0.28]), id_3)
+
+    observations += simulate_with_moving_agent(
+        sim,
+        duration=2.0,
+        agent_vel=np.array([0.0, 0.0, -0.4]),
+        look_rotation_vel=-5.0,
+        get_frames=make_video,
+    )
+
+    # %%
+    # @title Continue the episode, removing some objects
+
+    sim.remove_object(id_1)
+    sim.remove_object(id_2)
+
+    observations += simulate_with_moving_agent(
+        sim,
+        duration=2.0,
+        agent_vel=np.array([0.4, 0.0, 0.0]),
+        look_rotation_vel=-10.0,
+        get_frames=make_video,
+    )
+
+    # %%
+    # @title End the episode. Render the episode observations to a video.
+
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera",
+            "color",
+            output_path + "episode",
+            open_vid=show_video,
         )
 
-        # initial sensor local transform (relative to agent)
-        sensor_node.translation = [0.0, 0.6, 0.0]
-        sensor_node.rotation = mn.Quaternion.rotation(
-            mn.Deg(-15), mn.Vector3(1.0, 0.0, 0)
-        )
+    # %%
+    # @title Write a replay to file and do some cleanup.
+    # @markdown gfx replay files are written as JSON.
 
-        observations = []
+    sim.gfx_replay_manager.write_saved_keyframes_to_file(replay_filepath)
 
-        # simulate with empty scene
-        observations += simulate_with_moving_agent(
-            sim,
-            duration=1.0,
-            agent_vel=np.array([0.5, 0.0, 0.0]),
-            look_rotation_vel=25.0,
-            get_frames=make_video,
-        )
-
-        obj_templates_mgr = sim.get_object_template_manager()
-
-        obj_templates_mgr.load_configs(str(os.path.join(data_path, "objects")))
-        chefcan_template_handle = obj_templates_mgr.get_template_handles(
-            "data/objects/chefcan"
-        )[0]
-
-        y_dist = 0.1
-
-        # drop some dynamic objects
-        id_1 = sim.add_object_by_handle(chefcan_template_handle)
-        sim.set_translation(
-            np.array([2.4, -0.64 + random.uniform(-y_dist, y_dist), 0]), id_1
-        )
-        id_2 = sim.add_object_by_handle(chefcan_template_handle)
-        sim.set_translation(
-            np.array([2.4, -0.64 + random.uniform(-y_dist, y_dist), 0.28]), id_2
-        )
-        id_3 = sim.add_object_by_handle(chefcan_template_handle)
-        sim.set_translation(
-            np.array([2.4, -0.64 + random.uniform(-y_dist, y_dist), -0.28]), id_3
-        )
-
-        # simulate
-        observations += simulate_with_moving_agent(
-            sim,
-            duration=2.0,
-            agent_vel=np.array([0.0, 0.0, -0.4]),
-            look_rotation_vel=-5.0,
-            get_frames=make_video,
-        )
-
-        # remove some objects
-        sim.remove_object(id_1)
-        sim.remove_object(id_2)
-
-        observations += simulate_with_moving_agent(
-            sim,
-            duration=2.0,
-            agent_vel=np.array([0.4, 0.0, 0.0]),
-            look_rotation_vel=-10.0,
-            get_frames=make_video,
-        )
-
-        episodeName = "episode{}".format(episode_index)
-
-        if make_video:
-            vut.make_video(
-                observations,
-                "rgba_camera_1stperson",
-                "color",
-                output_path + episodeName,
-                open_vid=show_video,
-            )
-
-        # save a replay at the end of an episode
-        sim.gfx_replay_manager.write_saved_keyframes_to_file(
-            replay_filepaths[episode_index]
-        )
-
-        remove_all_objects(sim)
+    remove_all_objects(sim)
 
     # %%
     # @title Reconfigure simulator for replay playback.
-    if True:
+    # @markdown Note call to gfx_replay_utils.make_backend_configuration_for_playback. Note that we don't specify a scene or stage when reconfiguring for replay playback. need_separate_semantic_scene_graph is generally set to False, but must be set to True if you're replaying a scene that uses a separate semantic mesh. TODO: make this more user-friendly.
 
-        # use same agents/sensors from earlier, with different backend config
-        playback_cfg = habitat_sim.Configuration(
-            # gfx_replay_utils.make_backend_configuration_for_playback(need_separate_semantic_scene_graph=True),
-            gfx_replay_utils.make_backend_configuration_for_playback(
-                need_separate_semantic_scene_graph=False
-            ),
-            cfg.agents,
+    # use same agents/sensors from earlier, with different backend config
+    playback_cfg = habitat_sim.Configuration(
+        gfx_replay_utils.make_backend_configuration_for_playback(
+            need_separate_semantic_scene_graph=False
+        ),
+        cfg.agents,
+    )
+
+    if not sim:
+        sim = habitat_sim.Simulator(playback_cfg)
+    else:
+        sim.reconfigure(playback_cfg)
+
+    agent_state = habitat_sim.AgentState()
+    sim.initialize_agent(0, agent_state)
+
+    agent_node = sim.get_agent(0).body.object
+    sensor_node = sim._sensors["rgba_camera"]._sensor_object.object
+
+    # %%
+    # @title Place dummy agent with identify transform.
+    # @markdown For replay playback, we place a dummy agent at the origin and then transform the sensor using the "sensor" user transform stored in the replay. In the future, Habitat will offer a cleaner way to play replays without an agent.
+
+    agent_node.translation = [0.0, 0.0, 0.0]
+    agent_node.rotation = mn.Quaternion()
+
+    # %%
+    # @title Load our earlier saved replay.
+
+    player = sim.gfx_replay_manager.read_keyframes_from_file(replay_filepath)
+    assert player
+
+    # %%
+    # @title Play the replay!
+    # @markdown Note call to player.set_keyframe_index. Note also call to player.get_user_transform. For this playback, we restore our sensor to the original sensor transform from the episode. In this way, we reproduce the same observations. Note this doesn't happen automatically when using gfx replay; you must position your agent/sensor/camera explicitly when playing a replay.
+
+    observations = []
+    print("play replay #0...")
+    for frame in range(player.get_num_keyframes()):
+        player.set_keyframe_index(frame)
+
+        (sensor_node.translation, sensor_node.rotation) = player.get_user_transform(
+            "sensor"
         )
 
-        if not sim:
-            sim = habitat_sim.Simulator(playback_cfg)
-        else:
-            sim.reconfigure(playback_cfg)
+        observations.append(sim.get_sensor_observations())
 
-        agent_state = habitat_sim.AgentState()
-        sim.initialize_agent(0, agent_state)
-
-        agent_node = sim.get_agent(0).body.object
-        sensor_node = sim._sensors["rgba_camera_1stperson"]._sensor_object.object
-
-        # For replay playback, we place a dummy agent at the origin and then transform
-        # the sensor using the "sensor" user transform stored in the replay.
-        # In the future, Habitat will offer a cleaner way to play replays without an agent.
-        agent_node.translation = [0.0, 0.0, 0.0]
-        agent_node.rotation = mn.Quaternion()
-
-        # %%
-        # @title load replays
-
-        players = []
-        for filepath in replay_filepaths:
-            player = sim.gfx_replay_manager.read_keyframes_from_file(filepath)
-            assert player
-            players.append(player)
-
-        # %%
-        # @title play replay #0
-
-        observations = []
-        print("play replay #0...")
-        for frame in range(players[0].get_num_keyframes()):
-            players[0].set_keyframe_index(frame)
-
-            # todo: add comment
-            (sensor_node.translation, sensor_node.rotation) = player.get_user_transform(
-                "sensor"
-            )
-
-            observations.append(sim.get_sensor_observations())
-
-        if make_video:
-            vut.make_video(
-                observations,
-                "rgba_camera_1stperson",
-                "color",
-                output_path + "replay_playback1",
-                open_vid=show_video,
-            )
-
-        # %%
-        # @title play in reverse at 3x
-
-        observations = []
-        print("play in reverse at 3x...")
-        for frame in range(players[0].get_num_keyframes() - 2, -1, -3):
-            players[0].set_keyframe_index(frame)
-            (sensor_node.translation, sensor_node.rotation) = player.get_user_transform(
-                "sensor"
-            )
-            observations.append(sim.get_sensor_observations())
-
-        if make_video:
-            vut.make_video(
-                observations,
-                "rgba_camera_1stperson",
-                "color",
-                output_path + "replay_playback2",
-                open_vid=show_video,
-            )
-
-        # %%
-        # @title play from a different camera view, with agent visualization
-
-        observations = []
-        print("play from a different camera view, with agent visualization...")
-
-        # place a third-person camera
-        sensor_node.translation = [-1.1, -0.9, -0.2]
-        sensor_node.rotation = mn.Quaternion.rotation(
-            mn.Deg(-115), mn.Vector3(0.0, 1.0, 0)
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera",
+            "color",
+            output_path + "replay_playback1",
+            open_vid=show_video,
         )
 
-        prim_attr_mgr = sim.get_asset_template_manager()
+    # %%
+    # @title Play the replay again, in reverse at 3x speed (skipping frames).
 
-        # visualize the recorded agent transform as a cylinder
-        agent_viz_handle = prim_attr_mgr.get_template_handles("cylinderSolid")[0]
-        agent_viz_id = sim.add_object_by_handle(agent_viz_handle)
-        sim.set_object_motion_type(
-            habitat_sim.physics.MotionType.KINEMATIC, agent_viz_id
+    observations = []
+    print("play in reverse at 3x...")
+    for frame in range(player.get_num_keyframes() - 2, -1, -3):
+        player.set_keyframe_index(frame)
+        (sensor_node.translation, sensor_node.rotation) = player.get_user_transform(
+            "sensor"
         )
-        sim.set_object_is_collidable(False, agent_viz_id)
+        observations.append(sim.get_sensor_observations())
 
-        # visualize the recorded sensor transform as a cube
-        sensor_viz_handle = prim_attr_mgr.get_template_handles("cubeSolid")[0]
-        sensor_viz_id = sim.add_object_by_handle(sensor_viz_handle)
-        sim.set_object_motion_type(
-            habitat_sim.physics.MotionType.KINEMATIC, sensor_viz_id
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera",
+            "color",
+            output_path + "replay_playback2",
+            open_vid=show_video,
         )
-        sim.set_object_is_collidable(False, sensor_viz_id)
 
-        for frame in range(players[0].get_num_keyframes()):
-            players[0].set_keyframe_index(frame)
+    # %%
+    # @title Play from a different camera view, with the original agent and sensor
+    # visualized using primitives.
 
-            (agent_translation, agent_rotation) = players[0].get_user_transform("agent")
-            sim.set_translation(agent_translation, agent_viz_id)
-            sim.set_rotation(agent_rotation, agent_viz_id)
+    observations = []
+    print("play from a different camera view, with agent/sensor visualization...")
 
-            (sensor_translation, sensor_rotation) = players[0].get_user_transform(
-                "sensor"
-            )
-            sim.set_translation(sensor_translation, sensor_viz_id)
-            sim.set_rotation(sensor_rotation, sensor_viz_id)
+    # place a third-person camera
+    sensor_node.translation = [-1.1, -0.9, -0.2]
+    sensor_node.rotation = mn.Quaternion.rotation(mn.Deg(-115), mn.Vector3(0.0, 1.0, 0))
 
-            observations.append(sim.get_sensor_observations())
+    prim_attr_mgr = sim.get_asset_template_manager()
 
-        if make_video:
-            vut.make_video(
-                observations,
-                "rgba_camera_1stperson",
-                "color",
-                output_path + "replay_playback3",
-                open_vid=show_video,
-            )
+    # visualize the recorded agent transform as a cylinder
+    agent_viz_handle = prim_attr_mgr.get_template_handles("cylinderSolid")[0]
+    agent_viz_id = sim.add_object_by_handle(agent_viz_handle)
+    sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, agent_viz_id)
+    sim.set_object_is_collidable(False, agent_viz_id)
 
-        sim.remove_object(agent_viz_id)
+    # visualize the recorded sensor transform as a cube
+    sensor_viz_handle = prim_attr_mgr.get_template_handles("cubeSolid")[0]
+    sensor_viz_id = sim.add_object_by_handle(sensor_viz_handle)
+    sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, sensor_viz_id)
+    sim.set_object_is_collidable(False, sensor_viz_id)
 
-        # print("play all {} replays together...".format(num_episodes))
-        # for frame in range(players[0].get_num_keyframes()):
-        #     for player in players:
-        #         player.set_keyframe_index(frame)
-        #     gfx_replay_utils.set_agent_from_user_transform(players[0], sim)
-        #     observations.append(sim.get_sensor_observations())
+    for frame in range(player.get_num_keyframes()):
+        player.set_keyframe_index(frame)
 
-        # if make_video:
-        #     vut.make_video(
-        #         observations,
-        #         "rgba_camera_1stperson",
-        #         "color",
-        #         output_path + "replay_playback",
-        #         open_vid=show_video,
-        #     )
+        (agent_translation, agent_rotation) = player.get_user_transform("agent")
+        sim.set_translation(agent_translation, agent_viz_id)
+        sim.set_rotation(agent_rotation, agent_viz_id)
+
+        (sensor_translation, sensor_rotation) = player.get_user_transform("sensor")
+        sim.set_translation(sensor_translation, sensor_viz_id)
+        sim.set_rotation(sensor_rotation, sensor_viz_id)
+
+        observations.append(sim.get_sensor_observations())
+
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera",
+            "color",
+            output_path + "replay_playback3",
+            open_vid=show_video,
+        )
+
+    sim.remove_object(agent_viz_id)
+    sim.remove_object(sensor_viz_id)
+
+    # %%
+    # @title Load multiple replays and create a "sequence" image.
+    # @markdown In this tutorial, we only recorded one replay. In general, you can load and play multiple replays and they are rendered "additively" (all objects from all replays are visualized on top of each other). Here, let's load multiple copies of our replay and create a single image showing different snapshots in time.
+
+    observations = []
+    num_copies = 30
+    for i in range(num_copies):
+        other_player = sim.gfx_replay_manager.read_keyframes_from_file(replay_filepath)
+        assert other_player
+        other_player.set_keyframe_index(
+            player.get_num_keyframes() // (num_copies - 1) * i
+        )
+
+    # place a third-person camera
+    sensor_node.translation = [1.0, -0.9, -0.3]
+    sensor_node.rotation = mn.Quaternion.rotation(mn.Deg(-115), mn.Vector3(0.0, 1.0, 0))
+
+    # Create a video by repeating this image a few times. This is a workaround because
+    # we don't have make_image available in viz_utils. TODO: add make_image to
+    # viz_utils.
+    obs = sim.get_sensor_observations()
+    for _ in range(10):
+        observations.append(obs)
+
+    if make_video:
+        vut.make_video(
+            observations,
+            "rgba_camera",
+            "color",
+            output_path + "replay_playback4",
+            open_vid=show_video,
+        )
