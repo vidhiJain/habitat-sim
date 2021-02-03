@@ -1,0 +1,81 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    
+    {
+      "name": "(gdb) GfxReplayTest",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build_debug/tests/GfxReplayTest",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+      ]
+    },
+
+    {
+      "name": "(gdb) Viewer",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build_debug/utils/viewer/viewer",
+      "args": [
+        "/data/projects/habitat-sim/data/scene_datasets/habitat-test-scenes/skokloster-castle.glb",
+        "--enable-physics", 
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+
+    {
+      "name": "(gdb) Attach",
+      "type": "cppdbg",
+      "request": "attach",
+      "program": "/home/eric/anaconda3/envs/py36hab3/bin/python",
+      "processId": "${command:pickProcess}",
+      "MIMode": "gdb",
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+      ]
+    },
+
+    {
+      "name": "Python: ppo pointnav example",
+      "type": "python",
+      "request": "launch",
+      "program": "habitat_baselines/run.py",
+      "args": [
+        "--exp-config",
+        "habitat_baselines/config/pointnav/ppo_pointnav_example.yaml",
+        "--run-type",
+        "train"
+      ],
+      "console": "integratedTerminal"
+    }    
+  ]
+}
