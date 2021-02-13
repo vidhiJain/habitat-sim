@@ -313,6 +313,38 @@ class Simulator(SimulatorBackend):
         self.__last_state[agent_id] = agent.state
         return agent
 
+    def get_sensor_observations_async_start(self, agent_ids: Union[int, List[int]] = 0):
+        if isinstance(agent_ids, int):
+            agent_ids = [agent_ids]
+
+        for agent_id in agent_ids:
+            agent_sensorsuite = self.__sensors[agent_id]
+            for _sensor_uuid, sensor in agent_sensorsuite.items():
+                sensor.draw_observation()
+
+    def get_sensor_observations_async_finish(
+        self, agent_ids: Union[int, List[int]] = 0
+    ) -> Union[
+        Dict[str, Union[ndarray, "Tensor"]],
+        Dict[int, Dict[str, Union[ndarray, "Tensor"]]],
+    ]:
+        if isinstance(agent_ids, int):
+            agent_ids = [agent_ids]
+            return_single = True
+        else:
+            return_single = False
+
+        # As backport. All Dicts are ordered in Python >= 3.7
+        observations: Dict[int, Dict[str, Union[ndarray, "Tensor"]]] = OrderedDict()
+        for agent_id in agent_ids:
+            agent_observations: Dict[str, Union[ndarray, "Tensor"]] = {}
+            for sensor_uuid, sensor in self.__sensors[agent_id].items():
+                agent_observations[sensor_uuid] = sensor.get_observation()
+            observations[agent_id] = agent_observations
+        if return_single:
+            return next(iter(observations.values()))
+        return observations
+
     @overload
     def get_sensor_observations(
         self, agent_ids: int = 0
