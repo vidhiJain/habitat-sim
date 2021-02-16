@@ -29,6 +29,8 @@ class BulletDebugManager {
   void mapCollisionObjectTo(const btCollisionObject* colObj,
                             const std::string& debugName);
 
+  void unmapCollisionObject(const btCollisionObject* colObj);
+
   /**
    * @brief The number of contact points that were active during the last step.
    * An object resting on another object will involve several active contact

@@ -191,6 +191,8 @@ class BulletPhysicsManager : public PhysicsManager {
   void overrideCollisionGroup(const int physObjectID,
                               CollisionGroup group) const override;
 
+  void setRigidObjectSleep(int physObjectID, bool sleep) const override;
+
   /**
    * @brief Return ContactPointData objects describing the contacts from the
    * most recent physics substep. This implementation is roughly identical to

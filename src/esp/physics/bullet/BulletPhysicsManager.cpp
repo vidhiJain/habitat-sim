@@ -228,10 +228,11 @@ void BulletPhysicsManager::stepPhysics(double dt) {
   worldTime_ += numSubStepsTaken * fixedTimeStep_;
   m_recentNumSubStepsTaken = numSubStepsTaken;
 
-#if 0  // print collision debug info periodically?
+#ifndef NDEBUG  // print collision debug info periodically?
   {
-    // Beware getCollisionFilteringSummary is currently only safe to use if your program never removes physics objects. Otherwise it will crash.
-    // However, getStepCollisionSummary is always safe to use.
+    // Beware getCollisionFilteringSummary is currently only safe to use if your
+    // program never removes physics objects. Otherwise it will crash. However,
+    // getStepCollisionSummary is always safe to use.
 #if 0
     static bool isFirstRun = true;
     if (isFirstRun) {
@@ -243,8 +244,10 @@ void BulletPhysicsManager::stepPhysics(double dt) {
     static int counter = 0;
     counter++;
     if (counter == 100) {
-      //LOG(WARNING) << BulletDebugManager::get().getCollisionFilteringSummary(false) << std::endl;
-      //LOG(WARNING) << "---";
+      LOG(WARNING) << BulletDebugManager::get().getCollisionFilteringSummary(
+                          false)
+                   << std::endl;
+      LOG(WARNING) << "---";
       LOG(WARNING) << getStepCollisionSummary();
       LOG(WARNING) << "---";
       counter = 0;
@@ -322,6 +325,13 @@ void BulletPhysicsManager::overrideCollisionGroup(const int physObjectID,
   assertIDValidity(physObjectID);
   static_cast<BulletRigidObject*>(existingObjects_.at(physObjectID).get())
       ->overrideCollisionGroup(group);
+}
+
+void BulletPhysicsManager::setRigidObjectSleep(int physObjectID,
+                                               bool sleep) const {
+  assertIDValidity(physObjectID);
+  static_cast<BulletRigidObject*>(existingObjects_.at(physObjectID).get())
+      ->setSleep(sleep);
 }
 
 int BulletPhysicsManager::createRigidP2PConstraint(

@@ -53,6 +53,7 @@ BulletRigidObject::~BulletRigidObject() {
 
   // remove rigid body from the world
   bWorld_->removeRigidBody(bObjectRigidBody_.get());
+  BulletDebugManager::get().unmapCollisionObject(bObjectRigidBody_.get());
 
   collisionObjToObjIds_->erase(bObjectRigidBody_.get());
 
@@ -510,6 +511,14 @@ void BulletRigidObject::overrideCollisionGroup(CollisionGroup group) {
   bWorld_->removeRigidBody(bObjectRigidBody_.get());
   bWorld_->addRigidBody(bObjectRigidBody_.get(), int(group),
                         CollisionGroupHelper::getMaskForGroup(group));
+}
+
+void BulletRigidObject::setSleep(bool sleep) {
+  if (sleep) {
+    bObjectRigidBody_->setActivationState(ISLAND_SLEEPING);
+  } else {
+    setActive();
+  }
 }
 
 }  // namespace physics

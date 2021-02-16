@@ -21,6 +21,11 @@ void BulletDebugManager::mapCollisionObjectTo(const btCollisionObject* colObj,
   // std::cout << debugName << ": " << ((void*)(colObj)) << std::endl;
 }
 
+void BulletDebugManager::unmapCollisionObject(const btCollisionObject* colObj) {
+  ASSERT(collisionObjectToDebugName_.count(colObj));
+  collisionObjectToDebugName_.erase(colObj);
+}
+
 int BulletDebugManager::getNumActiveContactPoints(
     btMultiBodyDynamicsWorld* bWorld) {
   int count = 0;

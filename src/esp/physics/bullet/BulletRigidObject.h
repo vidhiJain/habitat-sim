@@ -429,6 +429,8 @@ class BulletRigidObject : public BulletBase,
 
   void overrideCollisionGroup(CollisionGroup group);
 
+  void setSleep(bool sleep);
+
   /** @brief Object data: All components of a @ref RigidObjectType::OBJECT are
    * wrapped into one @ref btRigidBody.
    */

@@ -836,6 +836,10 @@ class Simulator {
         objectID, esp::physics::CollisionGroup(group));
   }
 
+  void setRigidObjectSleep(int objectID, bool sleep) {
+    physicsManager_->setRigidObjectSleep(objectID, sleep);
+  }
+
   std::vector<esp::physics::ContactPointData> getPhysicsContactPoints(
       const int sceneID);
 

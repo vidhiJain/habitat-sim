@@ -1171,6 +1171,8 @@ class PhysicsManager {
   virtual void overrideCollisionGroup(const int physObjectID,
                                       CollisionGroup group) const {}
 
+  virtual void setRigidObjectSleep(int objectId, bool sleep) const {}
+
   /**
    * @brief Set an object to collidable or not.
    */
