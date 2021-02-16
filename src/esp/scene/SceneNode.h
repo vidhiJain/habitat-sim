@@ -120,7 +120,16 @@ class SceneNode : public MagnumObject {
 
   //! the cumulative bounding box of the full scene graph tree for which this
   //! node is the root
-  Magnum::Range3D cumulativeBB_;
+  Magnum::Range3D cumulativeBB_ = {{0.0, 0.0, 0.0}, {1e5, 1e5, 1e5}};
+
+  //! The cumulativeBB in world coordinates
+  //! This is returned instead of aabb_ if that doesn't exist
+  //! due to this being a node that is part of a dynamic object
+  mutable Corrade::Containers::Optional<Magnum::Range3D> worldCumulativeBB_ =
+      Corrade::Containers::NullOpt;
+
+  //! The absolute translation of this node, updated in clean
+  Magnum::Matrix4 absoluteTransformation_;
 
   //! the global bounding box for *static* meshes stored at this node
   //  NOTE: this is different from the local bounding box meshBB_ defined above:
