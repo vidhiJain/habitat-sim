@@ -148,3 +148,10 @@ PYBIND11_MODULE(habitat_sim_bindings, m) {
   esp::nav::initShortestPathBindings(m);
   esp::sim::initSimBindings(m);
 }
+
+
+// temp home
+extern "C" CORRADE_VISIBILITY_EXPORT CORRADE_NORETURN void habitatThrowPythonAssertionError(const char* message) {
+    PyErr_SetString(PyExc_AssertionError, message);
+    throw pybind11::error_already_set{};
+}

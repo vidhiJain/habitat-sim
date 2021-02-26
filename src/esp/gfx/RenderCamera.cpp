@@ -13,6 +13,10 @@
 #include "esp/gfx/DrawableGroup.h"
 #include "esp/scene/SceneGraph.h"
 
+// temp
+#include "esp/core/HabitatException.h"
+
+
 namespace Mn = Magnum;
 namespace Cr = Corrade;
 
@@ -194,6 +198,9 @@ uint32_t RenderCamera::draw(MagnumDrawableGroup& drawables, Flags flags) {
 }
 
 esp::geo::Ray RenderCamera::unproject(const Mn::Vector2i& viewportPosition) {
+
+  HABITAT_EXCEPTION(false, "here is my error message");
+
   esp::geo::Ray ray;
   ray.origin = object().absoluteTranslation();
 

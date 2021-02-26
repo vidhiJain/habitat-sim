@@ -12,6 +12,9 @@
 #include "esp/gfx/replay/Recorder.h"
 #include "esp/scene/SceneManager.h"
 
+// temp
+#include "esp/core/HabitatException.h"
+
 #include <Corrade/Containers/Optional.h>
 #include <Corrade/Utility/Directory.h>
 #include <Magnum/EigenIntegration/Integration.h>
@@ -309,4 +312,9 @@ TEST(GfxReplayTest, playerReadInvalidFile) {
                     "temporary test JSON file "
                  << testFilepath;
   }
+}
+
+TEST(GfxReplayTest, myNewTest) {
+
+  HABITAT_EXCEPTION(false, "here is my error message");
 }

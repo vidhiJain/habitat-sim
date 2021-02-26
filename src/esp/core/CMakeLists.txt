@@ -40,6 +40,8 @@ add_library(
   Configuration.h
   esp.cpp
   esp.h
+  HabitatException.cpp
+  HabitatException.h
   logging.h
   ManagedContainer.h
   ManagedContainerBase.cpp

@@ -51,4 +51,13 @@ void initSimBindings(pybind11::module& m);
 
 }  // namespace esp
 
+// temp home for this function
+#include <pybind11/pybind11.h>
+#include <Corrade/Utility/VisibilityMacros.h>
+#include <Corrade/Utility/Macros.h>
+
+/* Export this function and do that with a C linkage so it can be fetched via
+   an unmangled name afterwards */
+extern "C" CORRADE_VISIBILITY_EXPORT CORRADE_NORETURN void habitatThrowPythonAssertionError(const char* message);
+
 #endif  // ESP_BINDINGS_BINDINGS_H_
