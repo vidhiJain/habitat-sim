@@ -524,7 +524,9 @@ bool BulletRigidObject::preAddContactTest(
     std::shared_ptr<std::map<const btCollisionObject*, int> >
         collisionObjToObjIds,
     const bool isNavigationTest,
-    const Magnum::Quaternion& rotation) {
+    const Magnum::Quaternion& rotation,
+    int collisionFilterGroup,
+    int collisionFilterMask) {
   auto rotationMatrix = rotation.toMatrix();
   auto transformationMatrix =
       Magnum::Matrix4::from(rotationMatrix, translation);
@@ -534,6 +536,8 @@ bool BulletRigidObject::preAddContactTest(
   colObj->setWorldTransform(btTransform(transformationMatrix));
 
   PreAddSimulationContactResultCallback src;
+  src.m_collisionFilterGroup = collisionFilterGroup;
+  src.m_collisionFilterMask = collisionFilterMask;
   bWorld_->getCollisionWorld()->contactTest(colObj.get(), src);
 
   if (src.bCollision) {

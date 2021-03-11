@@ -425,3 +425,86 @@ def test_raycast():
             sim.set_stage_is_collidable(False)
             raycast_results = sim.cast_ray(test_ray_1)
             assert not raycast_results.has_hits()
+
+
+@pytest.mark.skipif(
+    not osp.exists("data/scene_datasets/habitat-test-scenes/apartment_1.glb"),
+    reason="Requires the habitat-test-scenes",
+)
+def test_preaddcontacttest():
+    cfg_settings = examples.settings.default_sim_settings.copy()
+
+    # configure some settings in case defaults change
+    cfg_settings["scene"] = "data/scene_datasets/habitat-test-scenes/apartment_1.glb"
+
+    # enable the physics simulator
+    cfg_settings["enable_physics"] = True
+
+    # loading the physical scene
+    hab_cfg = examples.settings.make_cfg(cfg_settings)
+    with habitat_sim.Simulator(hab_cfg) as sim:
+        obj_mgr = sim.get_object_template_manager()
+
+        if (
+            sim.get_physics_simulation_library()
+            != habitat_sim.physics.PhysicsSimulationLibrary.NONE
+        ):
+
+            cube_prim_handle = obj_mgr.get_template_handles("cube")[0]
+
+            sim.add_contact_test_object(cube_prim_handle)
+
+            # For these first set of queries, we place the query object at [2.4, -1.1, 0],
+            # which DOES overlap the stage.
+
+            # no filter; hit stage
+            hit = sim.pre_add_contact_test(cube_prim_handle, mn.Vector3(2.4, -1.1, 0))
+            assert hit
+
+            # set filter to only hit static; hit stage
+            hit = sim.pre_add_contact_test(
+                cube_prim_handle, mn.Vector3(2.4, -1.1, 0), False, 1, 2
+            )
+            assert hit
+
+            # set filter to only hit dynamic objects; hit nothing
+            hit = sim.pre_add_contact_test(
+                cube_prim_handle, mn.Vector3(2.4, -1.1, 0), False, 1, 1
+            )
+            assert not hit
+
+            # add a dynamic object nearby
+            dynamic_obj_id = sim.add_object_by_handle(cube_prim_handle)
+            sim.set_translation(mn.Vector3(2.4, -1.2, 0), dynamic_obj_id)
+
+            # set filter to only hit dynamic objects; hit dynamic object
+            hit = sim.pre_add_contact_test(
+                cube_prim_handle, mn.Vector3(2.4, -1.1, 0), False, 1, 1
+            )
+            assert hit
+
+            # For the next queries, we place the query object at [2.4, -0.6, 0],
+            # which does NOT overlap the stage.
+
+            # no filter; hit nothing
+            hit = sim.pre_add_contact_test(cube_prim_handle, mn.Vector3(2.4, -0.6, 0))
+            assert not hit
+
+            # move dynamic object nearby
+            sim.set_translation(mn.Vector3(2.4, -0.5, 0), dynamic_obj_id)
+
+            # no filter; hit dynamic object
+            hit = sim.pre_add_contact_test(cube_prim_handle, mn.Vector3(2.4, -0.6, 0))
+            assert hit
+
+            # set filter to only hit dynamic; hit dynamic object
+            hit = sim.pre_add_contact_test(
+                cube_prim_handle, mn.Vector3(2.4, -0.6, 0), False, 1, 1
+            )
+            assert hit
+
+            # set filter to only hit static; hit nothing
+            hit = sim.pre_add_contact_test(
+                cube_prim_handle, mn.Vector3(2.4, -0.6, 0), False, 1, 2
+            )
+            assert not hit
