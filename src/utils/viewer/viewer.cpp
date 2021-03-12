@@ -758,6 +758,7 @@ Key Commands:
   int fisheyeMode_ = 0;
 
   std::shared_ptr<esp::gfx::replay::Player> player_;
+  float ycbLightColorScale_ = 4.f;
 };
 
 void addSensors(esp::agent::AgentConfiguration& agentConfig,
@@ -2434,6 +2435,12 @@ void Viewer::reloadLights() {
     }
   }
   simulator_->setLightSetup(lightInfos);
+
+  for (auto& info : lightInfos) {
+    info.color *= ycbLightColorScale_;
+  }
+
+  simulator_->setLightSetup(lightInfos, "ycb");
 }
 
 }  // namespace
