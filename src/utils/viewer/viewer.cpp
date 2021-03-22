@@ -57,6 +57,8 @@
 #include "ObjectPickingHelper.h"
 #include "esp/physics/configure.h"
 
+#include "esp/scene/SemanticScene.h"
+
 constexpr float moveSensitivity = 0.07f;
 constexpr float lookSensitivity = 0.9f;
 constexpr float rgbSensorHeight = 1.5f;
@@ -282,6 +284,8 @@ Key Commands:
                 << "," << pt.z() << "}";
     }
   }
+
+  void visualizeRegions();
 
   /**
    * @brief Build trajectory visualization
@@ -585,6 +589,8 @@ Viewer::Viewer(const Arguments& arguments)
   // Per frame profiler will average measurements taken over previous 50 frames
   profiler_.setup(profilerValues, 50);
 
+  visualizeRegions();
+
   printHelpText();
 }  // end Viewer::Viewer
 
@@ -742,6 +748,46 @@ int Viewer::addPrimitiveObject() {
     return esp::ID_UNDEFINED;
   }
 }  // addPrimitiveObject
+
+
+void Viewer::visualizeRegions() {
+
+  const auto& ss = simulator_->getSemanticScene();
+  int i = 0;
+  for (const auto& region : ss->regions()) {
+
+    const auto& b = region->aabb();
+    LOG(INFO) << "region " << region->category()->name("")
+      << "[" 
+      << b.min().x() << ", " 
+      << b.min().y() << ", "
+      << b.min().z() << "]["
+      << b.max().x() << ", " 
+      << b.max().y() << ", "
+      << b.max().z() << "]";
+
+      std::vector<Magnum::Vector3> positions{
+        Magnum::Vector3(b.min().x(), b.min().y(), b.min().z()),
+        Magnum::Vector3(b.max().x(), b.min().y(), b.min().z()),
+        Magnum::Vector3(b.max().x(), b.max().y(), b.min().z()),
+        Magnum::Vector3(b.min().x(), b.max().y(), b.min().z()),
+        Magnum::Vector3(b.min().x(), b.min().y(), b.min().z()),
+        Magnum::Vector3(b.min().x(), b.min().y(), b.max().z()),
+        Magnum::Vector3(b.max().x(), b.min().y(), b.max().z()),
+        Magnum::Vector3(b.max().x(), b.max().y(), b.max().z()),
+        Magnum::Vector3(b.min().x(), b.max().y(), b.max().z()),
+        Magnum::Vector3(b.min().x(), b.min().y(), b.max().z())
+      };
+      Mn::Color4 color{randomDirection(), 1.0f};
+
+      int trajObjID = simulator_->addTrajectoryObject(
+          "regionViz" + std::to_string(i++), positions, positions.size() - 1, 
+          0.05, color, false, 10);
+
+  }
+
+
+}
 
 void Viewer::buildTrajectoryVis() {
   if (agentLocs_.size() < 2) {
