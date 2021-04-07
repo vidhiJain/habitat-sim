@@ -47,7 +47,7 @@ Module.preRun.push(() => {
 
   const fileNoExtension = scene.substr(0, scene.lastIndexOf("."));
 
-  preload(fileNoExtension + ".navmesh");
+  // disable for ConvoAI: preload(fileNoExtension + ".navmesh");
   preload(fileNoExtension + ".stage_config.json");
   if (config.semantic === "mp3d") {
     preload(fileNoExtension + ".house");

@@ -222,9 +222,9 @@ class VRDemo extends WebDemo {
     let state = new Module.AgentState();
     agent.getState(state);
     // ReplicaCAD
-    state.position = [2.0, 0.1, 5.8];
+    // state.position = [2.0, 0.1, 5.8];
     // ConvoAI
-    // state.position = [-1.43794, 0, -1.01545];
+    state.position = [-1.43794, 0, -1.01545];
     state.rotation = [0.0, 0.0, 0.0, 1.0];
     agent.setState(state, false);
 
