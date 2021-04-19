@@ -191,7 +191,8 @@ bool ResourceManager::loadStage(
       ((_physicsManager != nullptr) &&
        (_physicsManager->getInitializationAttributes()->getSimulator().compare(
             "none") != 0));
-  const std::string renderLightSetupKey(stageAttributes->getLightSetup());
+  // const std::string renderLightSetupKey(stageAttributes->getLightSetup());
+  const std::string renderLightSetupKey("");  // temp
   std::map<std::string, AssetInfo> assetInfoMap =
       createStageAssetInfosFromAttributes(stageAttributes, buildCollisionMesh,
                                           createSemanticMesh);
@@ -264,6 +265,7 @@ bool ResourceManager::loadStage(
   auto& drawables = sceneGraph.getDrawables();
 
   AssetInfo renderInfo = assetInfoMap.at("render");
+  renderInfo.requiresLighting = true;  // temp
 
   RenderAssetInstanceCreationInfo::Flags flags;
   flags |= RenderAssetInstanceCreationInfo::Flag::IsStatic;
