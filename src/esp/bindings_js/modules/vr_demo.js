@@ -14,20 +14,20 @@ const pointToArray = p => [p.x, p.y, p.z, p.w];
 const replicaCadObjectBaseFilepath = "data/replica/objects/";
 const replicaCadObjectNames = [
   "frl_apartment_vase_02", // gray
-  "frl_apartment_plate_02", // double-layer
-  "frl_apartment_pan_01", // blue, with handle
+  "frl_apartment_plate_02" // double-layer
+  // "frl_apartment_pan_01", // blue, with handle
 
-  "frl_apartment_kitchen_utensil_05", // serving tray
-  "banana_fixed",
+  // "frl_apartment_kitchen_utensil_05", // serving tray
+  // "banana_fixed",
 
-  "frl_apartment_plate_01",
+  // "frl_apartment_plate_01",
 
-  "frl_apartment_kitchen_utensil_06", // white handleless cup
+  // "frl_apartment_kitchen_utensil_06", // white handleless cup
 
-  "frl_apartment_bowl_06", // small white
+  // "frl_apartment_bowl_06", // small white
 
-  "frl_apartment_kitchen_utensil_02", // green spice shaker
-  "frl_apartment_kitchen_utensil_03" // orange spice shaker
+  // "frl_apartment_kitchen_utensil_02", // green spice shaker
+  // "frl_apartment_kitchen_utensil_03" // orange spice shaker
 
   // "frl_apartment_bowl_01", // orange/white
   //"frl_apartment_bowl_02", // red
@@ -47,25 +47,25 @@ const replicaCadObjectNames = [
 
 const replicaCadObjectInstanceNames = [
   "frl_apartment_vase_02", // gray
-  "frl_apartment_plate_02", // double-layer
-  "frl_apartment_pan_01", // blue, with handle
+  "frl_apartment_plate_02" // double-layer
+  // "frl_apartment_pan_01", // blue, with handle
 
-  "frl_apartment_kitchen_utensil_05", // serving tray
-  "banana_fixed",
-  "banana_fixed",
-  "banana_fixed",
+  // "frl_apartment_kitchen_utensil_05", // serving tray
+  // "banana_fixed",
+  // "banana_fixed",
+  // "banana_fixed",
 
-  "frl_apartment_plate_01",
-  "frl_apartment_plate_01",
+  // "frl_apartment_plate_01",
+  // "frl_apartment_plate_01",
 
-  "frl_apartment_kitchen_utensil_06", // white handleless cup
-  "frl_apartment_kitchen_utensil_06", // white handleless cup
+  // "frl_apartment_kitchen_utensil_06", // white handleless cup
+  // "frl_apartment_kitchen_utensil_06", // white handleless cup
 
-  "frl_apartment_bowl_06", // small white
-  "frl_apartment_bowl_06", // small white
+  // "frl_apartment_bowl_06", // small white
+  // "frl_apartment_bowl_06", // small white
 
-  "frl_apartment_kitchen_utensil_02", // green spice shaker
-  "frl_apartment_kitchen_utensil_03" // orange spice shaker
+  // "frl_apartment_kitchen_utensil_02", // green spice shaker
+  // "frl_apartment_kitchen_utensil_03" // orange spice shaker
 ];
 
 ///////////
@@ -99,12 +99,11 @@ export class FpsHelper {
         duration = 0.5;
         fps_desc = "APPROX FPS";
       }
-      // fpsComponent.innerHTML =
-      console.log(
+      fpsComponent.innerHTML +=
         fps_desc +
-          " " +
-          (this.numRendersSinceLastUpdate / duration).toFixed(1).toString()
-      );
+        " " +
+        (this.numRendersSinceLastUpdate / duration).toFixed(1).toString() +
+        "<br>";
       this.numRendersSinceLastUpdate = 0;
     }, 2000.0);
   }
