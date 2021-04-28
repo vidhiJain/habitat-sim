@@ -25,6 +25,7 @@
 #include <Magnum/Shaders/Generic.h>
 #include <Magnum/Shaders/Shaders.h>
 #include <Magnum/Timeline.h>
+#include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/gfx/replay/Recorder.h"
@@ -775,7 +776,11 @@ Key Commands:
   std::shared_ptr<esp::gfx::replay::Player> player_;
   float ycbLightColorScale_ = 4.f;
 
+  esp::gfx::DebugRender debugRender_;
+
   std::vector<CameraSplinePoint> cameraSpline_;
+
+  void bindRenderTarget();
 };
 
 void addSensors(esp::agent::AgentConfiguration& agentConfig,
@@ -1478,6 +1483,22 @@ void Viewer::drawEvent() {
     }
   }
 
+  {
+    const auto& existingObjectIDs = simulator_->getExistingObjectIDs();
+    for (const auto id : existingObjectIDs) {
+      debugRender_.pushInputTransform(simulator_->getTransformation(id));
+      // draw coordinate frame at object origin
+      constexpr float size = 0.25;
+      debugRender_.drawTransformedLine(
+          Mn::Vector3(0, 0, 0), Mn::Vector3(size, 0, 0), Mn::Color3::red());
+      debugRender_.drawTransformedLine(
+          Mn::Vector3(0, 0, 0), Mn::Vector3(0, size, 0), Mn::Color3::green());
+      debugRender_.drawTransformedLine(
+          Mn::Vector3(0, 0, 0), Mn::Vector3(0, 0, size), Mn::Color3::blue());
+      debugRender_.popInputTransform();
+    }
+  }
+
   uint32_t visibles = renderCamera_->getPreviousNumVisibleDrawables();
 
   if (fisheyeMode_ != 0) {
@@ -1521,6 +1542,13 @@ void Viewer::drawEvent() {
     // (this is the reason we do not call displayObservation)
     simulator_->drawObservation(defaultAgentId_, "rgba_camera");
     // TODO: enable other sensors to be displayed
+
+    {
+      Mn::Matrix4 camM(renderCamera_->cameraMatrix());
+      Mn::Matrix4 projM(renderCamera_->projectionMatrix());
+      debugRender_.setTransformationProjectionMatrix(projM * camM);
+      debugRender_.flushLines();
+    }
 
     Mn::GL::Renderer::setDepthFunction(
         Mn::GL::Renderer::DepthFunction::LessOrEqual);
