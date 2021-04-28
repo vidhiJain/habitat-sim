@@ -4,6 +4,8 @@ set(
   CubeMap.h
   DebugRender.cpp
   DebugRender.h
+  Debug3DText.cpp
+  Debug3DText.h
   DepthUnprojection.cpp
   DepthUnprojection.h
   Drawable.cpp
@@ -124,6 +126,7 @@ target_link_libraries(
          MagnumPlugins::StbImageConverter
          MagnumPlugins::TinyGltfImporter
          MagnumIntegration::Eigen
+         MagnumIntegration::ImGui
          Corrade::Utility
          Magnum::AnyImageConverter
 )
