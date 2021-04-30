@@ -78,13 +78,9 @@ LightSetup getLightsAtBoxCorners(const Magnum::Range3D& box,
 }
 
 LightSetup getDefaultLights() {
-  return LightSetup{
-      {{0.0, 0.5, 1.0, 0.0}, {2.4, 2.4, 2.4}},     // forward
-      {{0.0, 0.5, -1.0, 0.0}, {2.4, 2.4, 2.4}},    // backward
-      {{-1.0, 1.0, 0.0, 0.0}, {2.0, 2.0, 2.0}},    // top left
-      {{1.0, 1.0, 1.0, 0.0}, {2.0, 2.0, 2.0}},     // top right
-      {{0.0, -1.0, 0.0, 0.0}, {0.64, 0.64, 0.64}}  // bottom
-  };
+  return LightSetup{{{1.0, 1.0, 0.0, 0.0}, {0.75, 0.75, 0.75}},
+                    //{{-0.5, 0.0, 1.0, 0.0}, {0.4, 0.4, 0.4}},
+                    {{0.0, 1.0, 0.0, 0.0}, {1.0, 0.0, 0.0}}};
 }
 
 Magnum::Color3 getAmbientLightColor(const LightSetup& lightSetup) {
