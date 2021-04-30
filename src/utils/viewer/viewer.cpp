@@ -80,9 +80,21 @@ constexpr float lookSensitivity = 0.9f;
 constexpr float rgbSensorHeight = 1.5f;
 constexpr float agentActionsPerSecond = 60.0f;
 
+Mn::Quaternion handRot;
+Mn::Vector3 handPos;
+bool isHandMode = true;
+bool isFineTuningHand = false;
+// Mn::Math::Matrix4 handBaseTransform;
+Mn::Vector2 handRotOffset;
+Mn::Vector2 altHandRotOffset;
+Mn::Quaternion handBaseRot;
+Mn::Vector3 handBaseOffset;  // from agent, in agent-local space
+
 struct Openable {
   int articulatedObjectId, linkId, dofIx;
   float dofOpen, dofClosed;
+
+
 
   esp::sim::Simulator* sim_;
 
@@ -455,6 +467,259 @@ struct MouseObjectKinematicGrabber : public MouseGrabber {
 
 namespace {
 
+/*
+      if (inputSource.gripSpace) {
+        const inputPose = frame.getPose(
+          inputSource.gripSpace,
+          this.xrReferenceSpace
+        );
+
+        let gp = inputSource.gamepad;
+        let buttonStates = [false, false];
+        for (let i = 0; i < gp.buttons.length; i++) {
+          // Not sure what all these buttons are. Let's just use two.
+          let remappedIndex = i == 0 ? 0 : 1;
+          buttonStates[remappedIndex] ||=
+            gp.buttons[i].value > 0 || gp.buttons[i].pressed == true;
+        }
+        let closed = buttonStates[0];
+        let handObjId = closed ? handRecord_.objIds[1] : handRecord_.objIds[0];
+        let hiddenHandObjId = closed
+          ? handRecord_.objIds[0]
+          : handRecord_.objIds[1];
+
+        // update hand obj pose
+        let poseTransform = inputPose.transform;
+        const handPos = Module.Vector3.add(
+          Mn::Vector3(
+            ...pointToArray(poseTransform.position).slice(0, -1)
+          ),
+          agentPos
+        );
+
+        let handRot = Module.toQuaternion(
+          pointToArray(poseTransform.orientation)
+        );
+        simulator_->setTranslation(handPos, handObjId, 0);
+        simulator_->setRotation(handRot, handObjId, 0);
+
+
+        let palmFacingSign = handIndex == 0 ? 1.0 : -1.0;
+        let palmFacingDir = handRot.transformVector(
+          Mn::Vector3(palmFacingSign, 0.0, 0.0)
+        );
+
+        // try grab
+        if (buttonStates[0] && !handRecord_.prevButtonStates[0]) {
+          let maxDistance = 0.15;
+
+          let hitObjId = Module.castRay(
+            this.simenv.sim,
+            handPos,
+            palmFacingDir,
+            maxDistance
+          );
+
+
+          if (hitObjId != -1) {
+            handRecord_.heldObjId = hitObjId;
+
+            if (otherHandRecord.heldObjId == hitObjId) {
+              // release from other hand
+              otherHandRecord.heldObjId = -1;
+            }
+
+            let currTrans = simulator_->getTranslation(
+              handRecord_.heldObjId,
+              0
+            );
+            let currRot = simulator_->getRotation(handRecord_.heldObjId, 0);
+
+            let handRotInverted = handRot.inverted();
+            handRecord_.heldRelRot = Module.Quaternion.mul(
+              handRotInverted,
+              currRot
+            );
+            handRecord_.heldRelTrans = handRotInverted.transformVector(
+              Module.Vector3.sub(currTrans, handPos)
+            );
+
+            // set held obj to kinematic
+            simulator_->setObjectMotionType(
+              Module.MotionType.KINEMATIC,
+              handRecord_.heldObjId,
+              0
+            );
+          }
+        }
+*/
+
+class SpawnerGrabber {
+ public:
+  SpawnerGrabber(esp::sim::Simulator* simulator) : simulator_(simulator) {
+    for (int stateIndex = 0; stateIndex < 2; stateIndex++) {
+      auto handObjId = simulator_->addObjectByHandle(
+          stateIndex == 0 ? "data/objects/hand_r_open.object_config.json"
+                          : "data/objects/hand_r_closed.object_config.json");
+      CORRADE_INTERNAL_ASSERT(handObjId != -1);
+      simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                      handObjId);
+      simulator_->setObjectIsCollidable(false, handObjId);
+      handRecord_.objIds[stateIndex] = handObjId;
+    }
+
+    handRecord_.stickObjId =
+        simulator_->addObjectByHandle("data/objects/stick.object_config.json");
+    CORRADE_INTERNAL_ASSERT(handRecord_.stickObjId != -1);
+    simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                    handRecord_.stickObjId);
+    simulator_->setObjectIsCollidable(false, handRecord_.stickObjId);
+  }
+
+  void update(const Mn::Quaternion& handRot,
+              const Mn::Vector3& handPos,
+              const std::vector<bool>& buttonStates) {
+    bool closed = buttonStates[0];
+    constexpr int handIndex = 1;  // right hand
+
+    auto handObjId = closed ? handRecord_.objIds[1] : handRecord_.objIds[0];
+    auto hiddenHandObjId =
+        closed ? handRecord_.objIds[0] : handRecord_.objIds[1];
+
+    // update hand obj pose
+    if (closed) {
+      // hide closed hand
+      simulator_->setTranslation(Mn::Vector3(-1000.0, -1000.0, -1000.0),
+                                 handObjId);
+    } else {
+      simulator_->setTranslation(handPos, handObjId);
+      simulator_->setRotation(handRot, handObjId);
+    }
+
+    auto palmFacingSign = handIndex == 0 ? 1.0 : -1.0;
+    auto palmFacingDir =
+        handRot.transformVector(Mn::Vector3(palmFacingSign, 0.0, 0.0));
+
+    // try grab
+    if (buttonStates[0] && !handRecord_.prevButtonStates[0]) {
+      constexpr auto maxDistance = 1.0;  // temp 0.15;
+
+      esp::geo::Ray ray;
+      ray.origin = handPos;
+      ray.direction = palmFacingDir;
+      auto raycastResults = simulator_->castRay(ray, maxDistance);
+
+      auto hitObjId =
+          raycastResults.hasHits() ? raycastResults.hits[0].objectId : -1;
+
+      if (hitObjId != -1) {
+        handRecord_.heldObjId = hitObjId;
+
+        auto currTrans = simulator_->getTranslation(handRecord_.heldObjId);
+        auto currRot = simulator_->getRotation(handRecord_.heldObjId);
+
+        auto handRotInverted = handRot.inverted();
+        handRecord_.heldRelRot = handRotInverted * currRot;
+        handRecord_.heldRelTrans =
+            handRotInverted.transformVector(currTrans - handPos);
+
+        // set held obj to kinematic
+        simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                        handRecord_.heldObjId);
+      }
+    }
+
+    // update held object pose
+    if (handRecord_.heldObjId != -1) {
+      auto pad = std::min(0.5f, std::max(0.3f, palmFacingDir.y())) * 0.05 *
+                 palmFacingSign;
+      auto adjustedRelTrans =
+          handRecord_.heldRelTrans + Mn::Vector3(pad, 0.0, 0.0);
+
+      simulator_->setTranslation(
+          handPos + handRot.transformVector(adjustedRelTrans),
+          handRecord_.heldObjId);
+      simulator_->setRotation(handRot * handRecord_.heldRelRot,
+                              handRecord_.heldObjId);
+    }
+
+    // handle release
+    if (handRecord_.heldObjId != -1 && !buttonStates[0]) {
+      // set held object to dynamic
+      simulator_->setObjectMotionType(esp::physics::MotionType::DYNAMIC,
+                                      handRecord_.heldObjId);
+      handRecord_.heldObjId = -1;
+
+      isFineTuningHand =
+          false;  // sloppy: turn this off here after processing release
+    }
+
+    simulator_->setTranslation(handPos + Mn::Vector3(0.f, -1.0f, 0.f),
+                               handRecord_.stickObjId);
+
+    // hack hide other hand by translating far away
+    simulator_->setTranslation(Mn::Vector3(-1000.0, -1000.0, -1000.0),
+                               hiddenHandObjId);
+
+    handRecord_.prevButtonStates = buttonStates;
+  }
+
+ private:
+  struct HandRecord {
+    std::vector<int> objIds = {-1, -1};
+    int stickObjId = -1;
+    std::vector<bool> prevButtonStates = {false, false};
+    int heldObjId = -1;
+    Mn::Quaternion heldRelRot;
+    Mn::Vector3 heldRelTrans;
+  };
+
+  HandRecord handRecord_;
+
+  esp::sim::Simulator* simulator_ = nullptr;
+};
+
+/*
+
+
+
+
+
+        if (buttonStates[1] && !handRecord_.prevButtonStates[1]) {
+          //
+   cylinderSolid_rings_1_segments_12_halfLen_1_useTexCoords_false_useTangents_false_capEnds_true
+          //let filepath = "cubeSolid";
+
+          if (this.objectCounter < replicaCadObjectInstanceNames.length) {
+            let nextIndex = this.objectCounter;
+            this.objectCounter++;
+
+            const offsetDist = 0.25;
+            let spawnPos = Module.Vector3.add(
+              handPos,
+              Mn::Vector3(
+                palmFacingDir.x() * offsetDist,
+                palmFacingDir.y() * offsetDist,
+                palmFacingDir.z() * offsetDist
+              )
+            );
+
+            let filepath = VRDemo.getReplicaCadObjectConfigFilepath(
+              replicaCadObjectInstanceNames[nextIndex]
+            );
+            let objId = simulator_->addObjectByHandle(
+              filepath,
+              null,
+              "",
+              0
+            );
+            if (objId != -1) {
+              simulator_->setTranslation(spawnPos, objId, 0);
+            }
+          }
+        }
+*/
+
 //! return current time as string in format
 //! "year_month_day_hour-minutes-seconds"
 std::string getCurrentTimeString() {
@@ -474,15 +739,6 @@ class Viewer : public Mn::Platform::Application {
   explicit Viewer(const Arguments& arguments);
 
  private:
-  // Keys for moving/looking are recorded according to whether they are
-  // currently being pressed
-  std::map<KeyEvent::Key, bool> keysPressed = {
-      {KeyEvent::Key::Left, false}, {KeyEvent::Key::Right, false},
-      {KeyEvent::Key::Up, false},   {KeyEvent::Key::Down, false},
-      {KeyEvent::Key::A, false},    {KeyEvent::Key::D, false},
-      {KeyEvent::Key::S, false},    {KeyEvent::Key::W, false},
-      {KeyEvent::Key::X, false},    {KeyEvent::Key::Z, false}};
-
   void drawEvent() override;
   void viewportEvent(ViewportEvent& event) override;
   void mousePressEvent(MouseEvent& event) override;
@@ -491,7 +747,7 @@ class Viewer : public Mn::Platform::Application {
   void mouseScrollEvent(MouseScrollEvent& event) override;
   void keyPressEvent(KeyEvent& event) override;
   void keyReleaseEvent(KeyEvent& event) override;
-  void moveAndLook(int repetitions);
+  void moveAndLook(float dt, int repetitions);
 
   //! id of render-only object used to visualize the click location
   int clickVisObjectID_ = esp::ID_UNDEFINED;
@@ -774,6 +1030,8 @@ Key Commands:
 
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
   bool showFPS_ = true;
+  Mn::Vector2i accumulatedMouseMove_{0, 0};
+  Mn::Vector2i recentCursorPos_{0, 0};
 
   // NOTE: Mouse + shift is to select object on the screen!!
   void createPickedObjectVisualizer(unsigned int objectId);
@@ -797,6 +1055,22 @@ Key Commands:
   esp::gfx::Debug3DText debug3dText_;
 
   void bindRenderTarget();
+
+  std::unique_ptr<SpawnerGrabber> spawnerGrabber_;
+
+  // Keys for moving/looking are recorded according to whether they are
+  // currently being pressed
+  std::map<KeyEvent::Key, bool> keysPressed_ = {
+      {KeyEvent::Key::Left, false}, {KeyEvent::Key::Right, false},
+      {KeyEvent::Key::Up, false},   {KeyEvent::Key::Down, false},
+      {KeyEvent::Key::A, false},    {KeyEvent::Key::D, false},
+      {KeyEvent::Key::S, false},    {KeyEvent::Key::W, false},
+      {KeyEvent::Key::X, false},    {KeyEvent::Key::Z, false}};
+
+  std::map<MouseEvent::Button, bool> mouseButtonsPressed_ = {
+      {MouseEvent::Button::Left, false},
+      {MouseEvent::Button::Middle, false},
+      {MouseEvent::Button::Right, false}};
 };
 
 void addSensors(esp::agent::AgentConfiguration& agentConfig,
@@ -1115,6 +1389,7 @@ Viewer::Viewer(const Arguments& arguments)
   profiler_.setup(profilerValues, 50);
 
   esp::scripted::KitchenSetup kitchenSetup(simulator_.get());
+  spawnerGrabber_ = std::make_unique<SpawnerGrabber>(simulator_.get());
 
   printHelpText();
 }  // end Viewer::Viewer
@@ -1595,7 +1870,7 @@ void Viewer::drawEvent() {
   // Agent actions should occur at a fixed rate per second
   timeSinceLastSimulation += timeline_.previousFrameDuration();
   int numAgentActions = timeSinceLastSimulation * agentActionsPerSecond;
-  moveAndLook(numAgentActions);
+  moveAndLook(timeSinceLastSimulation, numAgentActions);
 
   // occasionally a frame will pass quicker than 1/60 seconds
   if (timeSinceLastSimulation >= 1.0 / 60.0) {
@@ -1834,51 +2109,234 @@ void Viewer::drawEvent() {
   redraw();
 }
 
-void Viewer::moveAndLook(int repetitions) {
-  for (int i = 0; i < repetitions; i++) {
-    if (keysPressed[KeyEvent::Key::Left]) {
-      defaultAgent_->act("turnLeft");
-    }
-    if (keysPressed[KeyEvent::Key::Right]) {
-      defaultAgent_->act("turnRight");
-    }
-    if (keysPressed[KeyEvent::Key::Up]) {
-      defaultAgent_->act("lookUp");
-    }
-    if (keysPressed[KeyEvent::Key::Down]) {
-      defaultAgent_->act("lookDown");
-    }
+void Viewer::moveAndLook(float dt, int repetitions) {
+  const bool isAltFineTuning = keysPressed_[KeyEvent::Key::Space];
 
-    bool moved = false;
-    if (keysPressed[KeyEvent::Key::A]) {
-      defaultAgent_->act("moveLeft");
-      moved = true;
-    }
-    if (keysPressed[KeyEvent::Key::D]) {
-      defaultAgent_->act("moveRight");
-      moved = true;
-    }
-    if (keysPressed[KeyEvent::Key::S]) {
-      defaultAgent_->act("moveBackward");
-      moved = true;
-    }
-    if (keysPressed[KeyEvent::Key::W]) {
-      defaultAgent_->act("moveForward");
-      moved = true;
-    }
-    if (keysPressed[KeyEvent::Key::X]) {
-      defaultAgent_->act("moveDown");
-      moved = true;
-    }
-    if (keysPressed[KeyEvent::Key::Z]) {
-      defaultAgent_->act("moveUp");
-      moved = true;
-    }
+  Mn::Vector3 moveOffset{0.f, 0.f, 0.f};
+  constexpr Mn::Vector3 rightDir{1.f, 0.f, 0.f};
+  constexpr Mn::Vector3 forwardDir{0.f, 0.f, -1.f};
+  constexpr Mn::Vector3 upDir{0.f, 1.f, 0.f};
 
-    if (moved) {
-      recAgentLocation();
+  if (keysPressed_[KeyEvent::Key::A]) {
+    moveOffset -= rightDir;
+  }
+  if (keysPressed_[KeyEvent::Key::D]) {
+    moveOffset += rightDir;
+  }
+  if (keysPressed_[KeyEvent::Key::S]) {
+    moveOffset -= forwardDir;
+  }
+  if (keysPressed_[KeyEvent::Key::W]) {
+    moveOffset += forwardDir;
+  }
+  if (keysPressed_[KeyEvent::Key::X]) {
+    moveOffset -= upDir;
+  }
+  if (keysPressed_[KeyEvent::Key::Z]) {
+    moveOffset += upDir;
+  }
+
+  constexpr float baseMoveSpeed = 1.0f;  // m/s
+  moveOffset *= baseMoveSpeed * dt;
+
+  if (isFineTuningHand) {
+    moveOffset *= 0.25f;
+  }
+
+  auto& controls = *defaultAgent_->getControls().get();
+
+  float agentRotDegrees = 0.f;
+  const auto& agentRot = agentBodyNode_->rotation();
+
+  if (isFineTuningHand) {
+#if 0
+    // todo: decide "trans" or "pos"
+    const auto& handPos = simulator_->getTranslation(handObjId);
+    const auto moveOffsetWorld = agentRot.transformVector(moveOffset);
+    handPos += moveOffsetWorld;
+    simulator_->setTranslation(handPos, handObjId);
+#endif
+
+    if (accumulatedMouseMove_ != Mn::Vector2i(0, 0)) {
+      Mn::Vector2 rotOffset{0.f, 0.f};
+      constexpr float rotScale = 0.005;  // radians/pixel
+      rotOffset.x() -= float(accumulatedMouseMove_.x()) * rotScale;
+      rotOffset.y() += float(accumulatedMouseMove_.y()) * rotScale;
+
+      if (!isAltFineTuning) {
+        handRotOffset += rotOffset;
+      } else {
+        altHandRotOffset += rotOffset;
+      }
+
+      if (!isAltFineTuning) {
+        constexpr float raiseLowerScale = 0.3f;
+        handBaseOffset.y() += -rotOffset.y() * raiseLowerScale;
+      }
+
+      const auto twistAxis =
+          agentRot.transformVector(Mn::Vector3{0.f, 0.f, -1.f});
+      const auto twistQuat =
+          Mn::Quaternion::rotation(Magnum::Rad{handRotOffset.x()}, twistAxis);
+      // handRot = rotOffsetQuat * handBaseRot;
+
+      // todo: fix comment: rotate up/down (x axis), then rotate right/left (y
+      // axis)
+      const auto pitchAxis =
+          agentRot.transformVector(Mn::Vector3{1.f, 0.f, 0.f});
+
+      const auto yawQuat = Mn::Quaternion::rotation(
+          Magnum::Rad{altHandRotOffset.x()}, Mn::Vector3(0.f, 1.f, 0.f));
+
+      // const auto pitchQuat =
+      // Mn::Quaternion::rotation(Magnum::Rad{altHandRotOffset.y()}, pitchAxis);
+      const auto pitchQuat = Mn::Quaternion(Mn::Math::IdentityInit);
+
+      const auto rotOffsetQuat = twistQuat * pitchQuat * yawQuat;
+
+      handRot = rotOffsetQuat * handBaseRot;
+      // simulator_->setRotation(handRot, handObjId);
+
+      if (isAltFineTuning) {
+        // also *orbit* agent about hand (translation and rotation)
+        auto rotAgentAboutHandQuat = Mn::Quaternion::rotation(
+            Magnum::Rad{rotOffset.x()}, Mn::Vector3(0.f, 1.f, 0.f));
+        // todo: guard against zero dist?
+        // todo: better comments
+        // const auto handToAgentWorld = agentBodyNode_->translation() -
+        // handPos; const auto handToAgentLocal =
+        // agentRot.inverted().transformVector(handToAgentWorld);
+        const auto handToAgentLocal = -handBaseOffset;
+        const auto rotatedHandToAgentLocal =
+            rotAgentAboutHandQuat.transformVector(handToAgentLocal);
+        moveOffset += rotatedHandToAgentLocal - handToAgentLocal;
+
+        agentRotDegrees = -float(Mn::Deg{Mn::Rad{rotOffset.x()}});
+      }
     }
   }
+
+  if (moveOffset.x() != 0.f) {
+    controls(*agentBodyNode_, moveOffset.x() > 0.f ? "moveRight" : "moveLeft",
+             Mn::Math::abs(moveOffset.x()));
+  }
+  if (moveOffset.y() != 0.f) {
+    controls(*agentBodyNode_, moveOffset.y() > 0.f ? "moveUp" : "moveDown",
+             Mn::Math::abs(moveOffset.y()));
+  }
+  if (moveOffset.z() != 0.f) {
+    controls(*agentBodyNode_,
+             moveOffset.z() > 0.f ? "moveBackward" : "moveForward",
+             Mn::Math::abs(moveOffset.z()));
+  }
+
+  if (moveOffset != Mn::Vector3(0.f, 0.f, 0.f)) {
+    recAgentLocation();
+  }
+
+#if 0
+  if (isFineTuningHand) {
+    // rotate agent to look at hand
+
+    // todo: handle degenerate case
+    // todo: review value versus reference for vectors
+    const auto& agentPos = agentBodyNode_->translation();
+    const auto& handTrans = simulator_->getTranslation(handObjId);
+    auto agentToHandXZ = agentPos - handTrans;
+    agentToHandXZ.y() = 0;
+
+    Mn::Vector3 upGuide{0.f, 1.f, 0.f};
+    // todo: handle degenerate upGuide case
+    // note look-direction negation. The agent looks in its -z direction.
+    Mn::Matrix4 transform = Mn::Matrix4::lookAt(agentPos, agentPos - agentToHandXZ, upGuide);
+    agentBodyNode_->setTransformation(transform);
+  }
+#endif
+
+  controls(*agentBodyNode_, agentRotDegrees > 0.f ? "turnRight" : "turnLeft",
+           Mn::Math::abs(agentRotDegrees));
+
+  if (isFineTuningHand) {
+    const auto& agentRot = agentBodyNode_->rotation();
+    auto handBaseOffsetWorld = agentRot.transformVector(handBaseOffset);
+    // simulator_->setTranslation(agentBodyNode_->translation() +
+    // handBaseOffsetWorld, handObjId);
+    handPos = agentBodyNode_->translation() + handBaseOffsetWorld;
+  }
+
+  // legacy action-based look
+  for (int i = 0; i < repetitions; i++) {
+    if (keysPressed_[KeyEvent::Key::Left]) {
+      defaultAgent_->act("turnLeft");
+    }
+    if (keysPressed_[KeyEvent::Key::Right]) {
+      defaultAgent_->act("turnRight");
+    }
+    if (keysPressed_[KeyEvent::Key::Up]) {
+      defaultAgent_->act("lookUp");
+    }
+    if (keysPressed_[KeyEvent::Key::Down]) {
+      defaultAgent_->act("lookDown");
+    }
+  }
+
+  accumulatedMouseMove_ = {0, 0};
+
+  // update hand pose
+  if (isHandMode && !isFineTuningHand) {
+    auto viewportPoint = recentCursorPos_;
+    auto ray = renderCamera_->unproject(viewportPoint);
+    esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
+
+    esp::physics::RayHitInfo hit;
+    if (raycastResults.hasHits()) {
+      hit = raycastResults.hits.front();
+    } else {
+      // todo: invent a point x units in front of camera, with contrived normal
+      hit.rayDistance = 1.f;
+      hit.point = ray.origin + ray.direction * hit.rayDistance;
+      hit.normal = ray.direction;
+    }
+
+#if 0
+    // derive transform from hit normal
+    // todo: map normal to -x?
+    Mn::Vector3 out = -hit.normal; // note negation
+    constexpr float eps = 0.01;
+    Mn::Vector3 upGuide{0.f, 1.f, 0.f};
+    if (1.f - Mn::Math::abs(hit.normal.y()) < eps) {
+      upGuide = {1.f, 0.f, 0.f};
+    }
+    Mn::Matrix4 transform = Mn::Matrix4::lookAt(handPos, handPos + out, upGuide);
+#endif
+
+    // note: hand model has palm facing -x and thumbs-up pointing -z
+    // open fingers are 45-degrees pointing -z/-y
+
+    Mn::Vector3 right = hit.normal;
+    Mn::Vector3 agentForwardDir =
+        agentRot.transformVector(Mn::Vector3(0.f, 0.f, -1.f));
+    Mn::Vector3 upGuide = -agentForwardDir;
+    constexpr auto eps = 0.01;
+    if (Mn::Math::cross(right, upGuide).length() < eps) {
+      upGuide = agentRot.transformVector(Mn::Vector3(1.f, 0.f, 0.f));
+    }
+    // todo: handle degenerate case
+    Mn::Vector3 out = Mn::Math::cross(right, upGuide).normalized();
+    Mn::Vector3 up = Mn::Math::cross(out, right);
+    Mn::Vector3 otherRight = Mn::Math::cross(up, out);
+    handRot = Magnum::Quaternion::fromMatrix(Mn::Matrix3(right, up, out));
+    // Mn::Matrix4 transform = Mn::Matrix4::lookAt(handPos, handPos + out,
+    // upGuide); handRot =
+    // Magnum::Quaternion::fromMatrix(transform.rotationShear());
+
+    constexpr auto handHitSpacing = 0.03;  // pad
+    handPos = hit.point + hit.normal * handHitSpacing;
+  }
+
+  spawnerGrabber_->update(handRot, handPos,
+                          {mouseButtonsPressed_[MouseEvent::Button::Right],
+                           mouseButtonsPressed_[MouseEvent::Button::Middle]});
 }
 
 void Viewer::bindRenderTarget() {
@@ -1940,6 +2398,23 @@ void Viewer::createPickedObjectVisualizer(unsigned int objectId) {
   }
 }
 
+/*
+
+struct RayHitInfo {
+  //! The id of the object hit by this ray. Stage hits are -1.
+  int objectId{};
+  //! The first impact point of the ray in world space.
+  Magnum::Vector3 point;
+  //! The collision object normal at the point of impact.
+  Magnum::Vector3 normal;
+  //! Distance along the ray direction from the ray origin (in units of ray
+  //! length).
+  double rayDistance{};
+
+  ESP_SMART_POINTERS(RayHitInfo)
+};
+
+*/
 void Viewer::mousePressEvent(MouseEvent& event) {
   if (event.button() == MouseEvent::Button::Right &&
       (event.modifiers() & MouseEvent::Modifier::Shift)) {
@@ -1965,6 +2440,7 @@ void Viewer::mousePressEvent(MouseEvent& event) {
     createPickedObjectVisualizer(pickedObject);
     return;
   }  // drawable selection
+  else if (event.button() == MouseEvent::Button::Right && !isHandMode) {
 
   if (event.button() == MouseEvent::Button::Left ||
       event.button() == MouseEvent::Button::Right) {
@@ -2098,27 +2574,35 @@ void Viewer::mousePressEvent(MouseEvent& event) {
     }
   }  // end MouseEvent::Button::Left || Right
 
+  if (isHandMode && event.button() == MouseEvent::Button::Right) {
+    const auto& agentPos = agentBodyNode_->translation();
+    const auto& agentRot = agentBodyNode_->rotation();
+
+    handBaseOffset = agentRot.inverted().transformVector(handPos - agentPos);
+    handBaseRot = handRot;
+    handRotOffset = Mn::Vector2(0, 0);
+    altHandRotOffset = Mn::Vector2(0, 0);
+    isFineTuningHand = true;
+  }
+
+  const auto key = event.button();
+  if (mouseButtonsPressed_.count(key) > 0) {
+    mouseButtonsPressed_[key] = true;
+  }
+
   event.setAccepted();
   redraw();
 }
 
 int mouseDofDelta = 0;
 void Viewer::mouseReleaseEvent(MouseEvent& event) {
-  // reset the mouse delta for dof selection
-  mouseDofDelta = 0;
-  if (event.button() == MouseEvent::Button::Left ||
-      event.button() == MouseEvent::Button::Right) {
-    mouseGrabber_ = nullptr;
+  // if (isHandMode && event.button() == MouseEvent::Button::Right) {
+  //   isFineTuningHand = false;
+  // }
 
-    // print the DOF
-    if (mouseInteractionMode == DOF) {
-      if (simulator_->getExistingArticulatedObjectIDs().size()) {
-        std::vector<float> pose = simulator_->getArticulatedObjectPositions(
-            simulator_->getExistingArticulatedObjectIDs().back());
-        Corrade::Utility::Debug()
-            << "DOF(" << mouseControlDof << ") = " << pose[mouseControlDof];
-      }
-    }
+  const auto key = event.button();
+  if (mouseButtonsPressed_.count(key) > 0) {
+    mouseButtonsPressed_[key] = false;
   }
 
   event.setAccepted();
@@ -2158,59 +2642,22 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
 }  // Viewer::mouseScrollEvent
 
 void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
-  if (mouseInteractionMode == LOOK &&
-      (event.buttons() & MouseMoveEvent::Button::Left)) {
-    const Mn::Vector2i delta = event.relativePosition();
-    auto& controls = *defaultAgent_->getControls().get();
-    controls(*agentBodyNode_, "turnRight", delta.x());
-    // apply the transformation to all sensors
-    for (auto& p : agentBodyNode_->getSubtreeSensors()) {
-      controls(p.second.get().object(),  // SceneNode
-               "lookDown",               // action name
-               delta.y(),                // amount
-               false);                   // applyFilter
-      redraw();
-    }
-  } else if (mouseGrabber_ != nullptr) {
-    auto ray = renderCamera_->unproject(event.position());
-    mouseGrabber_->target = renderCamera_->node().absoluteTranslation() +
-                            ray.direction * mouseGrabber_->gripDepth;
-    mouseGrabber_->updatePivotB(mouseGrabber_->target);
-    // update click visualization
-    simulator_->setTranslation(mouseGrabber_->target, clickVisObjectID_);
+  accumulatedMouseMove_ += event.relativePosition();
+  recentCursorPos_ = event.position();
 
-  } else if (mouseInteractionMode == DOF) {
-    if (simulator_->getExistingArticulatedObjectIDs().size()) {
-      if (event.buttons() & MouseMoveEvent::Button::Left) {
-        std::vector<float> pose = simulator_->getArticulatedObjectPositions(
-            simulator_->getExistingArticulatedObjectIDs().back());
-        mouseControlDof = mouseControlDof % pose.size();
-        if (mouseControlDof < 0)
-          mouseControlDof = pose.size() - 1;
-        pose[mouseControlDof] += event.relativePosition()[0] * 0.02;
-        simulator_->setArticulatedObjectPositions(
-            simulator_->getExistingArticulatedObjectIDs().back(), pose);
-      } else if (event.buttons() & MouseMoveEvent::Button::Right) {
-        mouseDofDelta += event.relativePosition()[0];
-        if (abs(mouseDofDelta) > 20) {
-          mouseControlDof += mouseDofDelta / abs(mouseDofDelta);
-          mouseDofDelta = 0;
-        }
-        if (mouseControlDof < 0)
-          mouseControlDof =
-              simulator_
-                  ->getArticulatedObjectPositions(
-                      simulator_->getExistingArticulatedObjectIDs().back())
-                  .size() -
-              1;
-        mouseControlDof =
-            mouseControlDof %
-            simulator_
-                ->getArticulatedObjectPositions(
-                    simulator_->getExistingArticulatedObjectIDs().back())
-                .size();
-      }
-    }
+  if (!(event.buttons() & MouseMoveEvent::Button::Left)) {
+    return;
+  }
+
+  const Mn::Vector2i delta = event.relativePosition();
+  auto& controls = *defaultAgent_->getControls().get();
+  controls(*agentBodyNode_, "turnRight", delta.x() * 0.5);
+  // apply the transformation to all sensors
+  for (auto& p : agentBodyNode_->getSubtreeSensors()) {
+    controls(p.second.get().object(),  // SceneNode
+             "lookDown",               // action name
+             delta.y(),                // amount
+             false);                   // applyFilter
   }
 
   event.setAccepted();
@@ -2234,10 +2681,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
          crashes at exit. We don't want that. */
       exit(0);
       break;
+#if 0
     case KeyEvent::Key::Space:
       simulating_ = !simulating_;
       Mn::Debug{} << " Physics Simulation: " << simulating_;
       break;
+#endif
     case KeyEvent::Key::Period:
       // also `>` key
       simulateSingleStep_ = true;
@@ -2506,8 +2955,8 @@ void Viewer::keyPressEvent(KeyEvent& event) {
   }
 
   // Update map of moving/looking keys which are currently pressed
-  if (keysPressed.count(key) > 0) {
-    keysPressed[key] = true;
+  if (keysPressed_.count(key) > 0) {
+    keysPressed_[key] = true;
   }
   redraw();
 }
@@ -2515,8 +2964,8 @@ void Viewer::keyPressEvent(KeyEvent& event) {
 void Viewer::keyReleaseEvent(KeyEvent& event) {
   // Update map of moving/looking keys which are currently pressed
   const auto key = event.key();
-  if (keysPressed.count(key) > 0) {
-    keysPressed[key] = false;
+  if (keysPressed_.count(key) > 0) {
+    keysPressed_[key] = false;
   }
   redraw();
 }
