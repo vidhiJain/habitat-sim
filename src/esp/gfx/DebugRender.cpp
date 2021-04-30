@@ -73,6 +73,40 @@ void DebugRender::drawTransformedLine(const Magnum::Vector3& from,
   drawLine(fromTransformed, toTransformed, fromColor, toColor);
 }
 
+void DebugRender::drawBox(const Magnum::Vector3& min,
+                          const Magnum::Vector3& max,
+                          const Magnum::Color3& color) {
+  // 4 lines along x axis
+  drawTransformedLine(Mn::Vector3(min.x(), min.y(), min.z()),
+                      Mn::Vector3(max.x(), min.y(), min.z()), color);
+  drawTransformedLine(Mn::Vector3(min.x(), min.y(), max.z()),
+                      Mn::Vector3(max.x(), min.y(), max.z()), color);
+  drawTransformedLine(Mn::Vector3(min.x(), max.y(), min.z()),
+                      Mn::Vector3(max.x(), max.y(), min.z()), color);
+  drawTransformedLine(Mn::Vector3(min.x(), max.y(), max.z()),
+                      Mn::Vector3(max.x(), max.y(), max.z()), color);
+
+  // 4 lines along y axis
+  drawTransformedLine(Mn::Vector3(min.x(), min.y(), min.z()),
+                      Mn::Vector3(min.x(), max.y(), min.z()), color);
+  drawTransformedLine(Mn::Vector3(max.x(), min.y(), min.z()),
+                      Mn::Vector3(max.x(), max.y(), min.z()), color);
+  drawTransformedLine(Mn::Vector3(min.x(), min.y(), max.z()),
+                      Mn::Vector3(min.x(), max.y(), max.z()), color);
+  drawTransformedLine(Mn::Vector3(max.x(), min.y(), max.z()),
+                      Mn::Vector3(max.x(), max.y(), max.z()), color);
+
+  // 4 lines along z axis
+  drawTransformedLine(Mn::Vector3(min.x(), min.y(), min.z()),
+                      Mn::Vector3(min.x(), min.y(), max.z()), color);
+  drawTransformedLine(Mn::Vector3(max.x(), min.y(), min.z()),
+                      Mn::Vector3(max.x(), min.y(), max.z()), color);
+  drawTransformedLine(Mn::Vector3(min.x(), max.y(), min.z()),
+                      Mn::Vector3(min.x(), max.y(), max.z()), color);
+  drawTransformedLine(Mn::Vector3(max.x(), max.y(), min.z()),
+                      Mn::Vector3(max.x(), max.y(), max.z()), color);
+}
+
 void DebugRender::updateCachedInputTransform() {
   _cachedInputTransform = Mn::Matrix4{Magnum::Math::IdentityInit};
   for (const auto& item : _inputTransformStack) {

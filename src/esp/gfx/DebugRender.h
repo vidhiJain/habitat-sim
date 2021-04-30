@@ -69,6 +69,10 @@ class DebugRender {
                            const Magnum::Color3& fromColor,
                            const Magnum::Color3& toColor);
 
+  void drawBox(const Magnum::Vector3& min,
+               const Magnum::Vector3& max,
+               const Magnum::Color3& color);
+
  private:
   void updateCachedInputTransform();
 
