@@ -256,7 +256,7 @@ void main() {
   // compute contribution of each light using the microfacet model
   // the following part of the code is inspired by the Phong.frag in Magnum
   // library (https://magnum.graphics/)
-  for (int iLight = 0; iLight < LIGHT_COUNT; ++iLight) {
+  for (int iLight = 0; iLight < LIGHT_COUNT - 1; ++iLight) { // hack notice off by one
     // Attenuation. Directional lights have the .w component set to 0, use
     // that to make the distance zero -- which will then ensure the
     // attenuation is always 1.0
@@ -280,6 +280,16 @@ void main() {
     finalColor += microfacetModel(baseColor.rgb, metallic, roughness, n, light,
                                   view, lightRadiance);
   }  // for lights
+
+  // hack skylight using LightDirections[LIGHT_COUNT - 1]
+  {
+    vec3 light = normalize(LightDirections[LIGHT_COUNT - 1].xyz -
+                            position * LightDirections[LIGHT_COUNT - 1].w);
+
+    vec3 groundLight = vec3(1.0, 0.95, 0.9) * 0.3;
+    vec3 skyLight = vec3(1.0, 1.0, 1.0) * 0.6;
+    finalColor += baseColor.rgb * mix(groundLight, skyLight, (dot(normal, light) + 1.0) * 0.5);
+  }
 
   // TODO: use ALPHA_MASK to discard fragments
   fragmentColor += vec4(finalColor, baseColor.a);
