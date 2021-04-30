@@ -72,7 +72,10 @@
 namespace Cr = Corrade;
 namespace Mn = Magnum;
 
-constexpr float moveSensitivity = 0.07f;
+#include "esp/scripted/EntityManagerHelper.h"
+#include "esp/scripted/KitchenSetup.h"
+
+constexpr float moveSensitivity = 0.04f;
 constexpr float lookSensitivity = 0.9f;
 constexpr float rgbSensorHeight = 1.5f;
 constexpr float agentActionsPerSecond = 60.0f;
@@ -1111,6 +1114,8 @@ Viewer::Viewer(const Arguments& arguments)
   // Per frame profiler will average measurements taken over previous 50 frames
   profiler_.setup(profilerValues, 50);
 
+  esp::scripted::KitchenSetup kitchenSetup(simulator_.get());
+
   printHelpText();
 }  // end Viewer::Viewer
 
@@ -1602,6 +1607,7 @@ void Viewer::drawEvent() {
         aliengoController->cycleUpdate(1.0 / 60.0);
       }
       simulator_->stepWorld(1.0 / 60.0);
+      esp::scripted::EntityManagerHelper::update(1.0 / 60.0);
       simulateSingleStep_ = false;
       const auto recorder = simulator_->getGfxReplayManager()->getRecorder();
       if (recorder) {
@@ -1611,6 +1617,8 @@ void Viewer::drawEvent() {
     // reset timeSinceLastSimulation, accounting for potential overflow
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
   }
+
+  esp::scripted::EntityManagerHelper::debugRender(debug3dText_, debugRender_);
 
   {
     const auto& existingObjectIDs = simulator_->getExistingObjectIDs();

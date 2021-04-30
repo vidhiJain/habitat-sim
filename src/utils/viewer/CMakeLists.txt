@@ -13,6 +13,7 @@ target_link_libraries(
           gfx
           nav
           scene
+          scripted
           sim
           geo
           Magnum::DebugTools
