@@ -6,6 +6,8 @@ add_library(
   EntityManager.hpp
   EntityManagerHelper.cpp
   EntityManagerHelper.h
+  FluidVesselEntity.cpp
+  FluidVesselEntity.h
   KitchenSetup.cpp
   KitchenSetup.h
   OvenEntity.cpp

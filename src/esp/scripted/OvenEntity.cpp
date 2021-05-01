@@ -36,7 +36,8 @@ OvenEntity::OvenEntity(esp::sim::Simulator* sim,
 
 bool OvenEntity::isInsideCookVolume(const Magnum::Vector3& pos) {
   const auto transform = sim_->getTransformation(objId_);
-  const auto posLocal = transform.transformPoint(pos);
+  // perf todo: cache inverted transform
+  const auto posLocal = transform.invertedRigid().transformPoint(pos);
   return heatVolume_.contains(posLocal);
 }
 
