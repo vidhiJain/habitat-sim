@@ -25,6 +25,15 @@ void Debug3DText::flushToImGui(const Magnum::Matrix4& camProj,
                                const Magnum::Vector2i& displaySize) {
   auto windowSize = ImGui::GetWindowSize();
 
+  static ImVec2 padding{2, 0};
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+  static float rounding = 4.f;
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, rounding);
+  static float borderSize = 0.f;
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, borderSize);
+  static ImVec2 minSize{1, 1};
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, minSize);
+
   for (int i = 0; i < records_.size(); i++) {
     const auto& record = records_[i];
 
@@ -42,9 +51,10 @@ void Debug3DText::flushToImGui(const Magnum::Matrix4& camProj,
 
     // Nonlinear distance-based scaling. We want far text to be slightly smaller
     // than near text.
-    constexpr float minFontScale = 1.0;
-    constexpr float fontRange = 1.0;
-    constexpr float distanceFactor = 0.01;
+    static float minFontScale = 1.0;
+    static float fontRange = 1.0;
+    static float distanceFactor =
+        0.02;  // make larger to make text shrinking more aggressive
     const float fontScale =
         Mn::Math::clamp(float(1.0 - posProj.z()) * (fontRange / distanceFactor),
                         0.f, fontRange) +
@@ -52,15 +62,18 @@ void Debug3DText::flushToImGui(const Magnum::Matrix4& camProj,
     CORRADE_INTERNAL_ASSERT(fontScale >= minFontScale &&
                             fontScale <= minFontScale + fontRange);
 
-    constexpr Mn::Vector2 screenPosOffset = Mn::Vector2(-7, -15);
+    static Mn::Vector2 screenPosOffset = Mn::Vector2(-7, -15);
     posScreen += screenPosOffset;
 
     ImGui::SetNextWindowPos(ImVec2(posScreen.x(), posScreen.y()));
     // perf todo: avoid constructing so many std::strings
+    static float bgAlpha = 0.5;
+    ImGui::SetNextWindowBgAlpha(bgAlpha);
     const auto windowName = "Debug3DText" + std::to_string(i);
-    ImGui::Begin(windowName.c_str(), NULL,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-                     ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin(
+        windowName.c_str(), NULL,
+        //  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::SetWindowFontScale(fontScale);
     ImGui::PushStyleColor(ImGuiCol_Text,
                           ImVec4(record.color.r(), record.color.g(),
@@ -69,6 +82,11 @@ void Debug3DText::flushToImGui(const Magnum::Matrix4& camProj,
     ImGui::PopStyleColor();
     ImGui::End();
   }
+
+  ImGui::PopStyleVar();
+  ImGui::PopStyleVar();
+  ImGui::PopStyleVar();
+  ImGui::PopStyleVar();
 
   records_.clear();
 }
