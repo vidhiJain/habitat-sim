@@ -15,6 +15,7 @@
 #include <Corrade/Utility/Macros.h>
 #include <Magnum/GL/Buffer.h>
 #include <Magnum/GL/Mesh.h>
+#include <Magnum/Math/Color.h>
 #include <Magnum/Math/Matrix4.h>
 #include <Magnum/Shaders/VertexColor.h>
 
@@ -32,7 +33,7 @@ class DebugRender {
    * @param initialBufferCapacity     Amount of lines for which to
    *      reserve memory in the buffer vector.
    *
-   * Sets up @ref Shaders::VertexColor3D, @ref GL::Buffer and
+   * Sets up @ref Shaders::VertexColor4D, @ref GL::Buffer and
    * @ref GL::Mesh for physics debug rendering.
    */
   explicit DebugRender(std::size_t initialBufferCapacity = 0);
@@ -52,25 +53,40 @@ class DebugRender {
 
   void drawLine(const Magnum::Vector3& from,
                 const Magnum::Vector3& to,
-                const Magnum::Color3& color);
+                const Magnum::Color4& color);
   void drawLine(const Magnum::Vector3& from,
                 const Magnum::Vector3& to,
-                const Magnum::Color3& fromColor,
-                const Magnum::Color3& toColor);
+                const Magnum::Color4& fromColor,
+                const Magnum::Color4& toColor);
   void flushLines();
 
   void pushInputTransform(const Magnum::Matrix4& transform);
   void popInputTransform();
   void drawTransformedLine(const Magnum::Vector3& from,
                            const Magnum::Vector3& to,
-                           const Magnum::Color3& color);
+                           const Magnum::Color4& color);
   void drawTransformedLine(const Magnum::Vector3& from,
                            const Magnum::Vector3& to,
-                           const Magnum::Color3& fromColor,
-                           const Magnum::Color3& toColor);
+                           const Magnum::Color4& fromColor,
+                           const Magnum::Color4& toColor);
+
+  void drawBox(const Magnum::Vector3& min,
+               const Magnum::Vector3& max,
+               const Magnum::Color4& color);
+
+  void drawCircle(const Magnum::Vector3& pos,
+                  const Magnum::Vector3& normal,
+                  float radius,
+                  int numSegments,
+                  const Magnum::Color4& color);
 
  private:
   void updateCachedInputTransform();
+
+  struct VertexRecord {
+    Magnum::Vector3 pos;
+    Magnum::Color4 color;
+  };
 
   std::vector<Magnum::Matrix4> _inputTransformStack;
   Magnum::Matrix4 _cachedInputTransform{Magnum::Math::IdentityInit};
@@ -78,7 +94,7 @@ class DebugRender {
   Magnum::Shaders::VertexColor3D _shader;
   Magnum::GL::Buffer _buffer;
   Magnum::GL::Mesh _mesh;
-  Magnum::Containers::Array<Magnum::Vector3> _bufferData;
+  Magnum::Containers::Array<VertexRecord> _bufferData;
 };
 
 }  // namespace gfx
