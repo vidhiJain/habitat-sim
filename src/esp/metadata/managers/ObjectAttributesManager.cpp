@@ -11,6 +11,8 @@
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 
+#include "esp/core/Check.h"
+
 namespace Cr = Corrade;
 
 namespace esp {
@@ -254,6 +256,8 @@ int ObjectAttributesManager::registerObjectFinalize(
         << " does not correspond to any existing file or primitive render "
            "asset.  Overriding with given render asset handle : "
         << renderAssetHandle << ". ";
+    ESP_CHECK(collisionAssetHandle.empty(),
+              "missing collision asset, see above output");
 
     objectTemplate->setCollisionAssetHandle(renderAssetHandle);
     objectTemplate->setCollisionAssetIsPrimitive(
