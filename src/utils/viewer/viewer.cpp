@@ -467,113 +467,31 @@ struct MouseObjectKinematicGrabber : public MouseGrabber {
 
 namespace {
 
-/*
-      if (inputSource.gripSpace) {
-        const inputPose = frame.getPose(
-          inputSource.gripSpace,
-          this.xrReferenceSpace
-        );
+float moveTo(float src, float target, float maxStep) {
+  CORRADE_INTERNAL_ASSERT(maxStep >= 0.f);
+  if (Mn::Math::abs(src - target) < maxStep) {
+    return target;
+  }
 
-        let gp = inputSource.gamepad;
-        let buttonStates = [false, false];
-        for (let i = 0; i < gp.buttons.length; i++) {
-          // Not sure what all these buttons are. Let's just use two.
-          let remappedIndex = i == 0 ? 0 : 1;
-          buttonStates[remappedIndex] ||=
-            gp.buttons[i].value > 0 || gp.buttons[i].pressed == true;
-        }
-        let closed = buttonStates[0];
-        let handObjId = closed ? handRecord_.objIds[1] : handRecord_.objIds[0];
-        let hiddenHandObjId = closed
-          ? handRecord_.objIds[0]
-          : handRecord_.objIds[1];
-
-        // update hand obj pose
-        let poseTransform = inputPose.transform;
-        const handPos = Module.Vector3.add(
-          Mn::Vector3(
-            ...pointToArray(poseTransform.position).slice(0, -1)
-          ),
-          agentPos
-        );
-
-        let handRot = Module.toQuaternion(
-          pointToArray(poseTransform.orientation)
-        );
-        simulator_->setTranslation(handPos, handObjId, 0);
-        simulator_->setRotation(handRot, handObjId, 0);
-
-
-        let palmFacingSign = handIndex == 0 ? 1.0 : -1.0;
-        let palmFacingDir = handRot.transformVector(
-          Mn::Vector3(palmFacingSign, 0.0, 0.0)
-        );
-
-        // try grab
-        if (buttonStates[0] && !handRecord_.prevButtonStates[0]) {
-          let maxDistance = 0.15;
-
-          let hitObjId = Module.castRay(
-            this.simenv.sim,
-            handPos,
-            palmFacingDir,
-            maxDistance
-          );
-
-
-          if (hitObjId != -1) {
-            handRecord_.heldObjId = hitObjId;
-
-            if (otherHandRecord.heldObjId == hitObjId) {
-              // release from other hand
-              otherHandRecord.heldObjId = -1;
-            }
-
-            let currTrans = simulator_->getTranslation(
-              handRecord_.heldObjId,
-              0
-            );
-            let currRot = simulator_->getRotation(handRecord_.heldObjId, 0);
-
-            let handRotInverted = handRot.inverted();
-            handRecord_.heldRelRot = Module.Quaternion.mul(
-              handRotInverted,
-              currRot
-            );
-            handRecord_.heldRelTrans = handRotInverted.transformVector(
-              Module.Vector3.sub(currTrans, handPos)
-            );
-
-            // set held obj to kinematic
-            simulator_->setObjectMotionType(
-              Module.MotionType.KINEMATIC,
-              handRecord_.heldObjId,
-              0
-            );
-          }
-        }
-*/
+  return src > target ? src - maxStep : src + maxStep;
+}
 
 class SpawnerGrabber {
  public:
   SpawnerGrabber(esp::sim::Simulator* simulator) : simulator_(simulator) {
+    showHands_ = false;
     for (int stateIndex = 0; stateIndex < 2; stateIndex++) {
-      auto handObjId = simulator_->addObjectByHandle(
-          stateIndex == 0 ? "data/objects/hand_r_open.object_config.json"
-                          : "data/objects/hand_r_closed.object_config.json");
-      CORRADE_INTERNAL_ASSERT(handObjId != -1);
-      simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
-                                      handObjId);
-      simulator_->setObjectIsCollidable(false, handObjId);
-      handRecord_.objIds[stateIndex] = handObjId;
+      if (showHands_) {
+        auto handObjId = simulator_->addObjectByHandle(
+            stateIndex == 0 ? "data/objects/hand_r_open.object_config.json"
+                            : "data/objects/hand_r_closed.object_config.json");
+        CORRADE_INTERNAL_ASSERT(handObjId != -1);
+        simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                        handObjId);
+        simulator_->setObjectIsCollidable(false, handObjId);
+        handRecord_.objIds[stateIndex] = handObjId;
+      }
     }
-
-    handRecord_.stickObjId =
-        simulator_->addObjectByHandle("data/objects/stick.object_config.json");
-    CORRADE_INTERNAL_ASSERT(handRecord_.stickObjId != -1);
-    simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
-                                    handRecord_.stickObjId);
-    simulator_->setObjectIsCollidable(false, handRecord_.stickObjId);
   }
 
   void update(const Mn::Quaternion& handRot,
@@ -582,18 +500,24 @@ class SpawnerGrabber {
     bool closed = buttonStates[0];
     constexpr int handIndex = 1;  // right hand
 
-    auto handObjId = closed ? handRecord_.objIds[1] : handRecord_.objIds[0];
-    auto hiddenHandObjId =
-        closed ? handRecord_.objIds[0] : handRecord_.objIds[1];
+    if (showHands_) {
+      auto handObjId = closed ? handRecord_.objIds[1] : handRecord_.objIds[0];
+      auto hiddenHandObjId =
+          closed ? handRecord_.objIds[0] : handRecord_.objIds[1];
 
-    // update hand obj pose
-    if (closed) {
-      // hide closed hand
+      // update hand obj pose
+      if (closed) {
+        // hide closed hand
+        simulator_->setTranslation(Mn::Vector3(-1000.0, -1000.0, -1000.0),
+                                   handObjId);
+      } else {
+        simulator_->setTranslation(handPos, handObjId);
+        simulator_->setRotation(handRot, handObjId);
+      }
+
+      // hack hide other hand by translating far away
       simulator_->setTranslation(Mn::Vector3(-1000.0, -1000.0, -1000.0),
-                                 handObjId);
-    } else {
-      simulator_->setTranslation(handPos, handObjId);
-      simulator_->setRotation(handRot, handObjId);
+                                 hiddenHandObjId);
     }
 
     auto palmFacingSign = handIndex == 0 ? 1.0 : -1.0;
@@ -624,6 +548,8 @@ class SpawnerGrabber {
             handRotInverted.transformVector(currTrans - handPos);
 
         // set held obj to kinematic
+        handRecord_.heldMotionType =
+            simulator_->getObjectMotionType(handRecord_.heldObjId);
         simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
                                         handRecord_.heldObjId);
       }
@@ -645,8 +571,16 @@ class SpawnerGrabber {
 
     // handle release
     if (handRecord_.heldObjId != -1 && !buttonStates[0]) {
-      // set held object to dynamic
-      simulator_->setObjectMotionType(esp::physics::MotionType::DYNAMIC,
+      // print transform
+      auto trans = simulator_->getTranslation(handRecord_.heldObjId);
+      auto rot = simulator_->getRotation(handRecord_.heldObjId);
+      LOG(INFO) << "trans: {" << trans.x() << "," << trans.y() << ","
+                << trans.z() << "}";
+      LOG(INFO) << "rot: {{" << rot.vector().x() << "," << rot.vector().y()
+                << "," << rot.vector().z() << "}," << rot.scalar() << "}";
+
+      // restore motion type
+      simulator_->setObjectMotionType(handRecord_.heldMotionType,
                                       handRecord_.heldObjId);
       handRecord_.heldObjId = -1;
 
@@ -654,24 +588,35 @@ class SpawnerGrabber {
           false;  // sloppy: turn this off here after processing release
     }
 
-    simulator_->setTranslation(handPos + Mn::Vector3(0.f, -1.0f, 0.f),
-                               handRecord_.stickObjId);
-
-    // hack hide other hand by translating far away
-    simulator_->setTranslation(Mn::Vector3(-1000.0, -1000.0, -1000.0),
-                               hiddenHandObjId);
+    // simulator_->setTranslation(handPos + Mn::Vector3(0.f, -1.0f, 0.f),
+    //                            handRecord_.stickObjId);
 
     handRecord_.prevButtonStates = buttonStates;
+    handRecord_.recentPos = handPos;
+  }
+
+  void debugRender(esp::gfx::Debug3DText& debug3dText,
+                   esp::gfx::DebugRender& debugRender) {
+    // simulator_->setTranslation(handPos + Mn::Vector3(0.f, -1.0f, 0.f),
+    //                            handRecord_.stickObjId);
+    constexpr float groundY = 0.f;
+    debugRender.drawLine(handRecord_.recentPos,
+                         Mn::Vector3(handRecord_.recentPos.x(), groundY,
+                                     handRecord_.recentPos.z()),
+                         Mn::Color3::yellow());
   }
 
  private:
+  bool showHands_ = false;
   struct HandRecord {
     std::vector<int> objIds = {-1, -1};
     int stickObjId = -1;
     std::vector<bool> prevButtonStates = {false, false};
     int heldObjId = -1;
+    esp::physics::MotionType heldMotionType;
     Mn::Quaternion heldRelRot;
     Mn::Vector3 heldRelTrans;
+    Mn::Vector3 recentPos;
   };
 
   HandRecord handRecord_;
@@ -1171,8 +1116,10 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
 Viewer::Viewer(const Arguments& arguments)
     : Mn::Platform::Application{
           arguments,
-          Configuration{}.setTitle("Viewer").setWindowFlags(
-              Configuration::WindowFlag::Resizable),
+          Configuration{}
+              .setTitle("Viewer")
+              .setSize({1024, 768})
+              .setWindowFlags(Configuration::WindowFlag::Resizable),
           GLConfiguration{}
               .setColorBufferSize(Mn::Vector4i(8, 8, 8, 8))
               .setSampleCount(4)} {
@@ -1893,8 +1840,7 @@ void Viewer::drawEvent() {
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
   }
 
-  esp::scripted::EntityManagerHelper::debugRender(debug3dText_, debugRender_);
-
+#if 0
   {
     const auto& existingObjectIDs = simulator_->getExistingObjectIDs();
     for (const auto id : existingObjectIDs) {
@@ -1910,22 +1856,10 @@ void Viewer::drawEvent() {
       debugRender_.popInputTransform();
     }
   }
+#endif
 
-  {
-    const auto& existingObjectIDs = simulator_->getExistingObjectIDs();
-    for (const auto id : existingObjectIDs) {
-      std::string name =
-          simulator_->getObjectInitializationTemplate(id)->getHandle();
-      debug3dText_.addText("id " + std::to_string(id),
-                           simulator_->getTranslation(id));
-    }
-
-    debug3dText_.addText("default", Mn::Vector3(0.f, 0.0, 0.0));
-    debug3dText_.addText("red", Mn::Vector3(1.f, 0.0, 0.0),
-                         Mn::Color4(1, 0, 0, 1));
-    debug3dText_.addText("white 50%", Mn::Vector3(2.f, 0.0, 0.0),
-                         Mn::Color4(1, 1, 1, 0.5));
-  }
+  esp::scripted::EntityManagerHelper::debugRender(debug3dText_, debugRender_);
+  spawnerGrabber_->debugRender(debug3dText_, debugRender_);
 
   uint32_t visibles = renderCamera_->getPreviousNumVisibleDrawables();
 
@@ -1959,6 +1893,16 @@ void Viewer::drawEvent() {
       simulator_->drawObservation(defaultAgentId_, "rgba_camera");
       // TODO: enable other sensors to be displayed
 
+      Mn::GL::Renderer::setDepthFunction(
+          Mn::GL::Renderer::DepthFunction::LessOrEqual);
+      if (debugBullet_) {
+        Mn::Matrix4 camM(renderCamera_->cameraMatrix());
+        Mn::Matrix4 projM(renderCamera_->projectionMatrix());
+        // Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Always);
+        simulator_->physicsDebugDraw(projM * camM);
+        // Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::LessOrEqual);
+      }
+      // draw lines after SceneGraph
       {
         Mn::Matrix4 camM(renderCamera_->cameraMatrix());
         Mn::Matrix4 projM(renderCamera_->projectionMatrix());
@@ -1966,14 +1910,6 @@ void Viewer::drawEvent() {
         debugRender_.flushLines();
       }
 
-      Mn::GL::Renderer::setDepthFunction(
-          Mn::GL::Renderer::DepthFunction::LessOrEqual);
-      if (debugBullet_) {
-        Mn::Matrix4 camM(renderCamera_->cameraMatrix());
-        Mn::Matrix4 projM(renderCamera_->projectionMatrix());
-
-        simulator_->physicsDebugDraw(projM * camM);
-      }
       Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
       Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
       Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
@@ -2112,35 +2048,47 @@ void Viewer::drawEvent() {
 void Viewer::moveAndLook(float dt, int repetitions) {
   const bool isAltFineTuning = keysPressed_[KeyEvent::Key::Space];
 
-  Mn::Vector3 moveOffset{0.f, 0.f, 0.f};
+  static Mn::Vector3 persistentMoveOffset{0.f, 0.f, 0.f};
   constexpr Mn::Vector3 rightDir{1.f, 0.f, 0.f};
   constexpr Mn::Vector3 forwardDir{0.f, 0.f, -1.f};
   constexpr Mn::Vector3 upDir{0.f, 1.f, 0.f};
 
   if (keysPressed_[KeyEvent::Key::A]) {
-    moveOffset -= rightDir;
+    persistentMoveOffset -= rightDir * dt;
   }
   if (keysPressed_[KeyEvent::Key::D]) {
-    moveOffset += rightDir;
+    persistentMoveOffset += rightDir * dt;
   }
   if (keysPressed_[KeyEvent::Key::S]) {
-    moveOffset -= forwardDir;
+    persistentMoveOffset -= forwardDir * dt;
   }
   if (keysPressed_[KeyEvent::Key::W]) {
-    moveOffset += forwardDir;
+    persistentMoveOffset += forwardDir * dt;
   }
   if (keysPressed_[KeyEvent::Key::X]) {
-    moveOffset -= upDir;
+    persistentMoveOffset -= upDir * dt;
   }
   if (keysPressed_[KeyEvent::Key::Z]) {
-    moveOffset += upDir;
+    persistentMoveOffset += upDir * dt;
   }
 
-  constexpr float baseMoveSpeed = 1.0f;  // m/s
-  moveOffset *= baseMoveSpeed * dt;
+  static float decayRate = 0.5f;
+  persistentMoveOffset.x() =
+      moveTo(persistentMoveOffset.x(), 0.f, decayRate * dt);
+  persistentMoveOffset.y() =
+      moveTo(persistentMoveOffset.y(), 0.f, decayRate * dt);
+  persistentMoveOffset.z() =
+      moveTo(persistentMoveOffset.z(), 0.f, decayRate * dt);
+
+  static float maxMoveOffset = 0.8f;
+  persistentMoveOffset =
+      Mn::Math::clamp(persistentMoveOffset, -maxMoveOffset, maxMoveOffset);
+
+  static float baseMoveSpeed = 2.5f;  // m/s
+  Mn::Vector3 adjustedMoveOffset = persistentMoveOffset * baseMoveSpeed * dt;
 
   if (isFineTuningHand) {
-    moveOffset *= 0.25f;
+    adjustedMoveOffset *= 0.5f;
   }
 
   auto& controls = *defaultAgent_->getControls().get();
@@ -2170,14 +2118,14 @@ void Viewer::moveAndLook(float dt, int repetitions) {
       }
 
       if (!isAltFineTuning) {
-        constexpr float raiseLowerScale = 0.3f;
+        constexpr float raiseLowerScale = 0.6f;
         handBaseOffset.y() += -rotOffset.y() * raiseLowerScale;
       }
 
       const auto twistAxis =
           agentRot.transformVector(Mn::Vector3{0.f, 0.f, -1.f});
-      const auto twistQuat =
-          Mn::Quaternion::rotation(Magnum::Rad{handRotOffset.x()}, twistAxis);
+      const auto twistQuat = Mn::Quaternion::rotation(
+          Magnum::Rad{altHandRotOffset.x()}, twistAxis);
       // handRot = rotOffsetQuat * handBaseRot;
 
       // todo: fix comment: rotate up/down (x axis), then rotate right/left (y
@@ -2186,7 +2134,7 @@ void Viewer::moveAndLook(float dt, int repetitions) {
           agentRot.transformVector(Mn::Vector3{1.f, 0.f, 0.f});
 
       const auto yawQuat = Mn::Quaternion::rotation(
-          Magnum::Rad{altHandRotOffset.x()}, Mn::Vector3(0.f, 1.f, 0.f));
+          Magnum::Rad{handRotOffset.x()}, Mn::Vector3(0.f, 1.f, 0.f));
 
       // const auto pitchQuat =
       // Mn::Quaternion::rotation(Magnum::Rad{altHandRotOffset.y()}, pitchAxis);
@@ -2197,7 +2145,7 @@ void Viewer::moveAndLook(float dt, int repetitions) {
       handRot = rotOffsetQuat * handBaseRot;
       // simulator_->setRotation(handRot, handObjId);
 
-      if (isAltFineTuning) {
+      if (!isAltFineTuning) {
         // also *orbit* agent about hand (translation and rotation)
         auto rotAgentAboutHandQuat = Mn::Quaternion::rotation(
             Magnum::Rad{rotOffset.x()}, Mn::Vector3(0.f, 1.f, 0.f));
@@ -2209,28 +2157,30 @@ void Viewer::moveAndLook(float dt, int repetitions) {
         const auto handToAgentLocal = -handBaseOffset;
         const auto rotatedHandToAgentLocal =
             rotAgentAboutHandQuat.transformVector(handToAgentLocal);
-        moveOffset += rotatedHandToAgentLocal - handToAgentLocal;
+        adjustedMoveOffset += rotatedHandToAgentLocal - handToAgentLocal;
 
         agentRotDegrees = -float(Mn::Deg{Mn::Rad{rotOffset.x()}});
       }
     }
   }
 
-  if (moveOffset.x() != 0.f) {
-    controls(*agentBodyNode_, moveOffset.x() > 0.f ? "moveRight" : "moveLeft",
-             Mn::Math::abs(moveOffset.x()));
-  }
-  if (moveOffset.y() != 0.f) {
-    controls(*agentBodyNode_, moveOffset.y() > 0.f ? "moveUp" : "moveDown",
-             Mn::Math::abs(moveOffset.y()));
-  }
-  if (moveOffset.z() != 0.f) {
+  if (adjustedMoveOffset.x() != 0.f) {
     controls(*agentBodyNode_,
-             moveOffset.z() > 0.f ? "moveBackward" : "moveForward",
-             Mn::Math::abs(moveOffset.z()));
+             adjustedMoveOffset.x() > 0.f ? "moveRight" : "moveLeft",
+             Mn::Math::abs(adjustedMoveOffset.x()));
+  }
+  if (adjustedMoveOffset.y() != 0.f) {
+    controls(*agentBodyNode_,
+             adjustedMoveOffset.y() > 0.f ? "moveUp" : "moveDown",
+             Mn::Math::abs(adjustedMoveOffset.y()));
+  }
+  if (adjustedMoveOffset.z() != 0.f) {
+    controls(*agentBodyNode_,
+             adjustedMoveOffset.z() > 0.f ? "moveBackward" : "moveForward",
+             Mn::Math::abs(adjustedMoveOffset.z()));
   }
 
-  if (moveOffset != Mn::Vector3(0.f, 0.f, 0.f)) {
+  if (adjustedMoveOffset != Mn::Vector3(0.f, 0.f, 0.f)) {
     recAgentLocation();
   }
 
@@ -2332,6 +2282,9 @@ void Viewer::moveAndLook(float dt, int repetitions) {
 
     constexpr auto handHitSpacing = 0.03;  // pad
     handPos = hit.point + hit.normal * handHitSpacing;
+
+    debugRender_.drawCircle(hit.point, hit.normal, 0.1, 10,
+                            Mn::Color3::magenta());
   }
 
   spawnerGrabber_->update(handRot, handPos,
