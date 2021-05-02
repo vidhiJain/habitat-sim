@@ -599,11 +599,39 @@ class SpawnerGrabber {
                    esp::gfx::DebugRender& debugRender) {
     // simulator_->setTranslation(handPos + Mn::Vector3(0.f, -1.0f, 0.f),
     //                            handRecord_.stickObjId);
-    constexpr float groundY = 0.f;
-    debugRender.drawLine(handRecord_.recentPos,
-                         Mn::Vector3(handRecord_.recentPos.x(), groundY,
-                                     handRecord_.recentPos.z()),
-                         Mn::Color3::yellow());
+    // constexpr float groundY = 0.f;
+    // debugRender.drawLine(handRecord_.recentPos,
+    //                      Mn::Vector3(handRecord_.recentPos.x(), groundY,
+    //                                  handRecord_.recentPos.z()),
+    //                      Mn::Color3::yellow());
+    if (handRecord_.heldObjId != -1) {
+      const auto range = simulator_->getObjectSceneNode(handRecord_.heldObjId)
+                             ->getCumulativeBB();
+      static float fudgeScale = 0.3f;
+      const float radius = (range.max() - range.min()).length() * fudgeScale;
+
+      esp::geo::Ray ray;
+      ray.origin = simulator_->getTranslation(handRecord_.heldObjId);
+      ray.direction = Mn::Vector3(0.f, -1.f, 0.f);
+      constexpr float maxDistance = 5.f;
+      auto raycastResults = simulator_->castRay(ray, maxDistance);
+
+      const esp::physics::RayHitInfo* minHit = nullptr;
+      for (const auto& hit : raycastResults.hits) {
+        if (hit.objectId == handRecord_.heldObjId) {
+          continue;
+        }
+        if (!minHit || hit.rayDistance < minHit->rayDistance) {
+          minHit = &hit;
+        }
+      }
+
+      if (minHit) {
+        debugRender.drawLine(minHit->point, ray.origin, Mn::Color4::blue());
+        debugRender.drawCircle(minHit->point, minHit->normal, radius, 16,
+                               Mn::Color4::blue());
+      }
+    }
   }
 
  private:
@@ -1206,6 +1234,7 @@ Viewer::Viewer(const Arguments& arguments)
   if (args.isSet("stage-requires-lighting")) {
     Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
     simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
+    simConfig.overrideSceneLightDefaults = true;
   }
 
   // setup the PhysicsManager config file
@@ -2072,7 +2101,7 @@ void Viewer::moveAndLook(float dt, int repetitions) {
     persistentMoveOffset += upDir * dt;
   }
 
-  static float decayRate = 0.5f;
+  const float decayRate = isFineTuningHand ? 0.4f : 0.7f;
   persistentMoveOffset.x() =
       moveTo(persistentMoveOffset.x(), 0.f, decayRate * dt);
   persistentMoveOffset.y() =
@@ -2084,11 +2113,11 @@ void Viewer::moveAndLook(float dt, int repetitions) {
   persistentMoveOffset =
       Mn::Math::clamp(persistentMoveOffset, -maxMoveOffset, maxMoveOffset);
 
-  static float baseMoveSpeed = 2.5f;  // m/s
+  static float baseMoveSpeed = 3.0f;  // m/s
   Mn::Vector3 adjustedMoveOffset = persistentMoveOffset * baseMoveSpeed * dt;
 
   if (isFineTuningHand) {
-    adjustedMoveOffset *= 0.5f;
+    adjustedMoveOffset *= 0.4f;
   }
 
   auto& controls = *defaultAgent_->getControls().get();
