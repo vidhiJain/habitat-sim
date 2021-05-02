@@ -94,8 +94,6 @@ struct Openable {
   int articulatedObjectId, linkId, dofIx;
   float dofOpen, dofClosed;
 
-
-
   esp::sim::Simulator* sim_;
 
   Openable(esp::sim::Simulator* sim,
@@ -2398,164 +2396,6 @@ struct RayHitInfo {
 
 */
 void Viewer::mousePressEvent(MouseEvent& event) {
-  if (event.button() == MouseEvent::Button::Right &&
-      (event.modifiers() & MouseEvent::Modifier::Shift)) {
-    // cannot use the default framebuffer, so setup another framebuffer,
-    // also, setup the color attachment for rendering, and remove the
-    // visualizer for the previously picked object
-    objectPickingHelper_->prepareToDraw();
-
-    // redraw the scene on the object picking framebuffer
-    esp::gfx::RenderCamera::Flags flags =
-        esp::gfx::RenderCamera::Flag::UseDrawableIdAsObjectId;
-    if (simulator_->isFrustumCullingEnabled())
-      flags |= esp::gfx::RenderCamera::Flag::FrustumCulling;
-    for (auto& it : activeSceneGraph_->getDrawableGroups()) {
-      renderCamera_->draw(it.second, flags);
-    }
-
-    // Read the object Id
-    unsigned int pickedObject =
-        objectPickingHelper_->getObjectId(event.position(), windowSize());
-
-    // if an object is selected, create a visualizer
-    createPickedObjectVisualizer(pickedObject);
-    return;
-  }  // drawable selection
-  else if (event.button() == MouseEvent::Button::Right && !isHandMode) {
-
-  if (event.button() == MouseEvent::Button::Left ||
-      event.button() == MouseEvent::Button::Right) {
-    auto viewportPoint = event.position();
-    auto ray = renderCamera_->unproject(viewportPoint);
-
-    esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
-
-    // create the clickNode primitive if not present
-    if (clickVisObjectID_ == esp::ID_UNDEFINED) {
-      auto boxTemplateHandle =
-          objectAttrManager_->getSynthTemplateHandlesBySubstring(
-              "cubeWireframe")[0];
-      auto boxTemplate =
-          objectAttrManager_->getObjectByHandle(boxTemplateHandle);
-      boxTemplate->setScale({0.1, 0.1, 0.1});
-      boxTemplate->setIsCollidable(false);
-      objectAttrManager_->registerObject(boxTemplate, "click_vis");
-      clickVisObjectID_ = simulator_->addObjectByHandle("click_vis");
-      simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
-                                      clickVisObjectID_);
-    }
-
-    // update click visualization
-    simulator_->setTranslation(
-        renderCamera_->node().absoluteTranslation() + ray.direction,
-        clickVisObjectID_);
-
-    // ray hit a collision object, visualize this and determine the hit object
-    if (raycastResults.hasHits()) {
-      auto hitInfo = raycastResults.hits[0];  // first hit
-
-      // update click visualization
-      simulator_->setTranslation(hitInfo.point, clickVisObjectID_);
-
-// voxelize the clicked object/stage
-#ifdef ESP_BUILD_WITH_VHACD
-      if (event.button() == MouseEvent::Button::Right &&
-          event.modifiers() & MouseEvent::Modifier::Ctrl) {
-        auto objID = raycastResults.hits[0].objectId;
-        displayVoxelField(objID);
-        return;
-      }
-#endif
-
-      if (hitInfo.objectId != esp::ID_UNDEFINED) {
-        // we hit an non-stage collision object
-
-        bool hitArticulatedObject = false;
-        // TODO: determine if this is true (link id?)
-        int hitArticulatedObjectId = esp::ID_UNDEFINED;
-        int hitArticulatedLinkIndex = esp::ID_UNDEFINED;
-        // TODO: get this info from link?
-        for (auto aoId : simulator_->getExistingArticulatedObjectIDs()) {
-          if (aoId == hitInfo.objectId) {
-            // grabbed the base link
-            hitArticulatedObject = true;
-            hitArticulatedObjectId = aoId;
-          } else if (simulator_->getObjectIdsToLinkIds(aoId).count(
-                         hitInfo.objectId) > 0) {
-            hitArticulatedObject = true;
-            hitArticulatedObjectId = aoId;
-            hitArticulatedLinkIndex =
-                simulator_->getObjectIdsToLinkIds(aoId).at(hitInfo.objectId);
-          }
-        }
-
-        if (mouseInteractionMode == GRAB) {
-          if (hitArticulatedObject) {
-            if (event.button() == MouseEvent::Button::Right) {
-              mouseGrabber_ = std::make_unique<MouseArticulatedBaseGrabber>(
-                  hitInfo.point,
-                  (hitInfo.point - renderCamera_->node().absoluteTranslation())
-                      .length(),
-                  hitArticulatedObjectId, simulator_.get());
-            } else if (event.button() == MouseEvent::Button::Left) {
-              if (hitArticulatedLinkIndex != esp::ID_UNDEFINED) {
-                // TODO: handle constraint to base link
-                mouseGrabber_ = std::make_unique<MouseLinkGrabber>(
-                    hitInfo.point,
-                    (hitInfo.point -
-                     renderCamera_->node().absoluteTranslation())
-                        .length(),
-                    hitArticulatedObjectId, hitArticulatedLinkIndex,
-                    simulator_.get());
-              }
-            }
-          } else {
-            if (event.button() == MouseEvent::Button::Right) {
-              mouseGrabber_ = std::make_unique<MouseObjectKinematicGrabber>(
-                  hitInfo.point,
-                  (hitInfo.point - renderCamera_->node().absoluteTranslation())
-                      .length(),
-                  hitInfo.objectId, simulator_.get());
-            } else if (event.button() == MouseEvent::Button::Left) {
-              mouseGrabber_ = std::make_unique<MouseObjectGrabber>(
-                  hitInfo.point,
-                  (hitInfo.point - renderCamera_->node().absoluteTranslation())
-                      .length(),
-                  hitInfo.objectId, simulator_.get());
-            }
-          }
-        } else if (mouseInteractionMode == OPENCLOSE) {
-          if (hitArticulatedObject) {
-            Corrade::Utility::Debug()
-                << "OPENCLOSE: aoid = " << hitArticulatedObjectId
-                << ", linkId = " << hitInfo.objectId;
-            for (auto openable : openableObjects) {
-              if (openable.articulatedObjectId == hitArticulatedObjectId) {
-                if (openable.linkId == hitArticulatedLinkIndex) {
-                  openable.openClose();
-                }
-              }
-            }
-            for (auto& locobotController : locobotControllers) {
-              if (locobotController->objectId == hitArticulatedObjectId) {
-                locobotController->toggle();
-              }
-            }
-            for (auto& aliengoController : aliengoControllers) {
-              if (aliengoController->objectId == hitArticulatedObjectId) {
-                aliengoController->toggle();
-              }
-            }
-          }
-        }
-      }  // end if not hit stage
-    }    // end raycastResults.hasHits()
-    if (mouseInteractionMode == THROW) {
-      throwSphere(ray.direction * 10);
-    }
-  }  // end MouseEvent::Button::Left || Right
-
   if (isHandMode && event.button() == MouseEvent::Button::Right) {
     const auto& agentPos = agentBodyNode_->translation();
     const auto& agentRot = agentBodyNode_->rotation();
@@ -2576,7 +2416,6 @@ void Viewer::mousePressEvent(MouseEvent& event) {
   redraw();
 }
 
-int mouseDofDelta = 0;
 void Viewer::mouseReleaseEvent(MouseEvent& event) {
   // if (isHandMode && event.button() == MouseEvent::Button::Right) {
   //   isFineTuningHand = false;
