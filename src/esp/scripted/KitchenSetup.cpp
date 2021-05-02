@@ -77,8 +77,9 @@ KitchenSetup::KitchenSetup(esp::sim::Simulator* sim) {
 
   FluidVesselEntity::Blueprint milkCartonBp{
     .objHandle = "data/objects/milk_carton.object_config.json",
-    .spoutPos = Mn::Vector3(-0.05, 0.28, 0.0),
-    .spoutDir = Mn::Vector3(0.0, 1.0, 0.0),
+    .spoutPos = Mn::Vector3(-0.05, 0.28, 0.0) * 0.5,
+    .spoutDir = Mn::Vector3(-1.0, 1.0, 0.0),
+    .spoutConeAngle = Mn::Deg(45),
     .spoutRadius = 0.02,
     .volume = 0.5,
     .initialFluidType = "milk"
@@ -91,6 +92,7 @@ KitchenSetup::KitchenSetup(esp::sim::Simulator* sim) {
     .objHandle = "data/objects/frl_apartment_cup_02.object_config.json",
     .spoutPos = Mn::Vector3(0.0, 0.07, 0.0),
     .spoutDir = Mn::Vector3(0.0, 1.0, 0.0),
+    .spoutConeAngle = Mn::Deg(90),
     .spoutRadius = 0.06,
     .volume = 0.2,
     .initialFluidType = ""
@@ -108,7 +110,8 @@ KitchenSetup::KitchenSetup(esp::sim::Simulator* sim) {
 
   id = sim->addObjectByHandle("data/objects/ktc_clutter_potmatt.object_config.json");
   CORRADE_INTERNAL_ASSERT(id != -1);
-  sim->setTranslation(Mn::Vector3(0.f, 0.2f, 2.6), id);
+  sim->setTranslation({-0.127363,-0.431755,1.4129}, id);
+  sim->setRotation({{-0.00295681,0.751272,0.00389342},0.659974}, id);
 
   loadStaticObjects(sim);
 }

@@ -4,6 +4,7 @@
 
 #include "FluidVesselEntity.h"
 #include "EntityManager.h"
+#include "esp/core/Check.h"
 
 #include <iomanip>
 #include <sstream>
@@ -21,6 +22,7 @@ FluidVesselEntity::FluidVesselEntity(esp::sim::Simulator* sim,
 
   // sloppy: fix up spoutDir
   bp_.spoutDir = bp_.spoutDir.normalized();
+  ESP_CHECK(bp_.spoutConeAngle <= Mn::Deg(180), "bp_.spoutConeAngle <= Mn::Deg(180)");
 
   auto id =
       sim->addObjectByHandle(bp_.objHandle);
@@ -49,7 +51,8 @@ void FluidVesselEntity::update(float dt) {
 
   const auto transform = sim_->getTransformation(objId_);
   Mn::Vector3 spoutDirWorld = transform.transformVector(bp_.spoutDir);
-  if (spoutDirWorld.y() >= 0.f) {
+  // if within spoutConeAngle of straight down
+  if (spoutDirWorld.y() >= -Mn::Math::cos(bp_.spoutConeAngle)) {
     return;
   }
   Mn::Vector3 spoutPosWorld = transform.transformPoint(bp_.spoutPos);
@@ -154,7 +157,7 @@ void FluidVesselEntity::debugRender(esp::gfx::Debug3DText& debug3dText,
   float amount = fluidVolumeByType_[fluidType];
   if (amount > 0) {
     std::stringstream ss;
-    ss << fluidType << " " << std::fixed << std::setprecision(1) << (amount * 1000.f)
+    ss << fluidType << "\n" << std::fixed << std::setprecision(1) << (amount * 1000.f)
       << "ml";
     debug3dText.addText(ss.str(), pos);
   }

@@ -22,6 +22,7 @@ class FluidVesselEntity {
     std::string objHandle;
     Magnum::Vector3 spoutPos;
     Magnum::Vector3 spoutDir;
+    Magnum::Deg spoutConeAngle = Mn::Deg(90);
     float spoutRadius;
     float volume; // in liters, or 0 to indicate infinite volume
     std::string initialFluidType; // or empty string
