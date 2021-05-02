@@ -1000,7 +1000,7 @@ Key Commands:
   Mn::Timeline timeline_;
 
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
-  bool showFPS_ = true;
+  bool showFPS_ = false;
   Mn::Vector2i accumulatedMouseMove_{0, 0};
   Mn::Vector2i recentCursorPos_{0, 0};
 
@@ -2040,6 +2040,7 @@ void Viewer::drawEvent() {
     ImGui::End();
   }
 
+#if 0
   ImGui::SetNextWindowPos(ImVec2(10, 10));
   ImGui::Begin("main", NULL,
                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
@@ -2049,6 +2050,7 @@ void Viewer::drawEvent() {
       "Mouse Ineraction Mode: " + getEnumName(mouseInteractionMode);
   ImGui::Text("%s", modeText.c_str());
   ImGui::End();
+#endif
 
   /* Set appropriate states. If you only draw ImGui, it is sufficient to
      just enable blending and scissor test in the constructor. */
@@ -2512,6 +2514,7 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       // also `>` key
       simulateSingleStep_ = true;
       break;
+#if 0
       // ==== Look direction and Movement ====
     case KeyEvent::Key::Left:
       defaultAgent_->act("turnLeft");
@@ -2548,6 +2551,7 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       defaultAgent_->act("moveUp");
       recAgentLocation();
       break;
+#endif
     case KeyEvent::Key::J:
       sensorMode_ = static_cast<VisualSensorMode>(
           (uint8_t(sensorMode_) + 1) %
