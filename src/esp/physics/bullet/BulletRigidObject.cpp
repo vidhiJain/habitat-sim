@@ -416,7 +416,8 @@ void BulletRigidObject::constructAndAddRigidBody(MotionType mt) {
     bWorld_->addRigidBody(
         bObjectRigidBody_.get(), int(CollisionGroup::FreeObject),
         CollisionGroupHelper::getMaskForGroup(CollisionGroup::FreeObject));
-    setSleep(false);
+    // setSleep(false);
+    bObjectRigidBody_->activate(true);
   }
 }
 
