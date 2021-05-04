@@ -116,6 +116,8 @@ int BulletPhysicsManager::addArticulatedObjectFromURDF(
     float globalScale,
     float massScale,
     bool forceReload) {
+  urdfImporter_ = std::make_unique<BulletURDFImporter>(resourceManager_);
+
   if (!urdfImporter_->loadURDF(filepath, globalScale, massScale, forceReload)) {
     Corrade::Utility::Debug() << "E - failed to parse/load URDF file";
     return ID_UNDEFINED;
