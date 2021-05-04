@@ -56,7 +56,7 @@ LightSetup getLightsAtBoxCorners(const Magnum::Range3D& box,
 }
 
 LightSetup getDefaultLights() {
-  static float yComp = 0.5;
+  static float yComp = 0.3;
   LightSetup setups = {{{1.0, yComp, 0.1, 0.0}, {0.4, 0.4, 0.4}},
                        {{-1.0, yComp, 0.2, 0.0}, {0.3, 0.3, 0.3}},
                        {{0.3, yComp, 1.0, 0.0}, {0.2, 0.2, 0.2}},
