@@ -80,6 +80,11 @@ class DebugRender {
                   int numSegments,
                   const Magnum::Color4& color);
 
+  void drawCurve(const std::vector<Magnum::Vector3>& controlPositions,
+                 const std::vector<Magnum::Vector3>& controlTangents,
+                 const Magnum::Color4& color,
+                 int numSegmentsPerControl);
+
  private:
   void updateCachedInputTransform();
 
