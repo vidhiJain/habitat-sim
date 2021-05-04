@@ -13,9 +13,10 @@ namespace esp {
 namespace scripted {
 
 CookableEntity::CookableEntity(esp::sim::Simulator* sim,
+                               const CookableEntity::Blueprint& bp,
                                const Magnum::Vector3& translation,
                                const Magnum::Quaternion& rotation)
-    : sim_(sim) {
+    : bp_(bp), sim_(sim) {
   EntityManager<CookableEntity>::get().onConstruct(this);
 
   auto id =
@@ -29,12 +30,10 @@ CookableEntity::CookableEntity(esp::sim::Simulator* sim,
 }
 
 void CookableEntity::update(float dt) {
-
-  constexpr float targetCookTime = 10.f;
-  bool wasCooked = cookTime_ > targetCookTime;
+  bool wasCooked = cookTime_ > bp_.targetCookTime;
 
   const auto pos = sim_->getTranslation(objId_);
-  constexpr float minCookTemp = 250.f;
+  constexpr float minCookTemp = 350.f;
   for (auto* oven : EntityManager<OvenEntity>::get().getVector()) {
     float temp = oven->getTemperature();
     if (temp >= minCookTemp) {
@@ -44,12 +43,12 @@ void CookableEntity::update(float dt) {
     }
   }
 
-  if (!wasCooked && cookTime_ > targetCookTime) {
+  if (!wasCooked && cookTime_ > bp_.targetCookTime) {
     auto translation = sim_->getTranslation(objId_);
     // auto rotation = sim_->getRotation(objId_);
     sim_->removeObject(objId_);
-    auto id =
-        sim_->addObjectByHandle("data/objects/cookie_cooked.object_config.json");
+    auto id = sim_->addObjectByHandle(
+        "data/objects/cookie_cooked.object_config.json");
     CORRADE_INTERNAL_ASSERT(id != -1);
     sim_->setTranslation(translation, id);
     // use identity transform?
@@ -66,10 +65,9 @@ void CookableEntity::debugRender(esp::gfx::Debug3DText& debug3dText,
                                  esp::gfx::DebugRender& debugRender) {
   const auto pos = sim_->getTranslation(objId_);
 
-  if (cookTime_ > 0) {
+  if (cookTime_ > 0 && cookTime_ <= bp_.targetCookTime) {
     std::stringstream ss;
-    ss << "cook time " << std::fixed << std::setprecision(1) << cookTime_
-      << "s";
+    ss << std::fixed << std::setprecision(1) << cookTime_ << "s";
     debug3dText.addText(ss.str(), pos + Mn::Vector3(0.f, 0.0, 0.0));
   }
 }

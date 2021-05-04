@@ -17,7 +17,19 @@ namespace scripted {
 
 class OvenEntity {
  public:
+  struct Blueprint {
+    std::string urdfFilepath;
+    Magnum::Range3D heatVolume;
+    Magnum::Vector3 openSensorPos;
+    Magnum::Vector3 openSensorDir;
+    float roomTemp = 75.f;
+    float targetTemp = 350.f;
+    float closedTempPerSec = 10.f;
+    float openTempPerSec = -1;
+  };
+
   OvenEntity(esp::sim::Simulator* sim,
+             const OvenEntity::Blueprint& bp,
              const Magnum::Vector3& translation,
              const Magnum::Quaternion& rotation);
 
@@ -33,10 +45,11 @@ class OvenEntity {
   float getTemperature() { return temp_; }
 
  private:
+  Blueprint bp_;
   int objId_ = -1;
   esp::sim::Simulator* sim_ = nullptr;
-  float temp_ = 75.f;
-  Magnum::Range3D heatVolume_;
+  float temp_ = 0.f;
+  bool isClosed_ = true;
 };
 
 }  // namespace scripted
