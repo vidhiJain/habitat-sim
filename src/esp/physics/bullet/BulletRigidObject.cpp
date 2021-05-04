@@ -123,9 +123,9 @@ bool BulletRigidObject::constructCollisionShape() {
         resMgr_.getMeshMetaData(collisionAssetHandle);
 
     if (!usingBBCollisionShape_) {
-      constructConvexShapesFromMeshes(Magnum::Matrix4{}, meshGroup,
-                                      metaData.root, joinCollisionMeshes,
-                                      bObjectShape_.get());
+      constructConvexShapesFromMeshes(
+          Magnum::Matrix4{}, meshGroup, metaData.root, joinCollisionMeshes,
+          bObjectShape_.get(), bObjectConvexShapes_);
 
       // add the final object after joining meshes
       if (joinCollisionMeshes) {
