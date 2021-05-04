@@ -7,6 +7,8 @@
 #include <Corrade/Containers/GrowableArray.h>
 #include <Magnum/GL/Renderer.h>
 #include <Magnum/Math/Color.h>
+#include <Magnum/Math/CubicHermite.h>
+#include "Magnum/Animation/Interpolation.h"
 
 namespace Cr = Corrade;
 namespace Mn = Magnum;
@@ -142,7 +144,7 @@ void DebugRender::drawCircle(const Magnum::Vector3& pos,
                              int numSegments,
                              const Magnum::Color4& color) {
   // https://stackoverflow.com/questions/11132681/what-is-a-formula-to-get-a-vector-perpendicular-to-another-vector
-  auto randomPerpVec = normal.z() < normal.x()
+  auto randomPerpVec = Mn::Math::abs(normal.z()) < Mn::Math::abs(normal.x())
                            ? Mn::Vector3(normal.y(), -normal.x(), 0)
                            : Mn::Vector3(0, -normal.z(), normal.y());
 
@@ -161,6 +163,35 @@ void DebugRender::drawCircle(const Magnum::Vector3& pos,
 
   popInputTransform();
 }
+
+void DebugRender::drawCurve(
+    const std::vector<Magnum::Vector3>& controlPositions,
+    const std::vector<Magnum::Vector3>& controlTangents,
+    const Magnum::Color4& color,
+    int numSegmentsPerControl) {
+  CORRADE_INTERNAL_ASSERT(controlPositions.size() >= 2);
+  CORRADE_INTERNAL_ASSERT(controlPositions.size() == controlTangents.size());
+
+  Mn::Vector3 prevPt;
+  for (int cp = 1; cp < controlPositions.size(); cp++) {
+    Mn::CubicHermite3D a{controlTangents[cp - 1], controlPositions[cp - 1],
+                         controlTangents[cp - 1]};
+    Mn::CubicHermite3D b{controlTangents[cp - 0], controlPositions[cp - 0],
+                         controlTangents[cp - 0]};
+    for (int segment = 0; segment <= numSegmentsPerControl; segment++) {
+      if (cp > 1 && segment == 0) {
+        continue;  // already computed as last point of previous segment
+      }
+      const float fraction = (float)segment / numSegmentsPerControl;
+      Mn::Vector3 pt = Mn::Animation::interpolatorFor<Mn::CubicHermite3D>(
+          Mn::Animation::Interpolation::Spline)(a, b, fraction);
+      if (cp > 1 || segment > 0) {
+        drawTransformedLine(prevPt, pt, color);
+      }
+      prevPt = pt;
+    }
+  }
+};
 
 void DebugRender::updateCachedInputTransform() {
   _cachedInputTransform = Mn::Matrix4{Magnum::Math::IdentityInit};
