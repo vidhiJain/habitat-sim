@@ -98,13 +98,30 @@ btCollisionShape* BulletURDFImporter::convertURDFToCollisionShape(
         const assets::MeshMetaData& metaData = resourceManager_.getMeshMetaData(
             collision->m_geometry.m_meshFileName);
 
-        auto convexShape = new btConvexHullShape();
-        esp::physics::BulletBase::constructJoinedConvexShapeFromMeshes(
-            Magnum::Matrix4{}, meshGroup, metaData.root, convexShape);
-        convexShape->setLocalScaling(
-            btVector3(collision->m_geometry.m_meshScale));
-        convexShape->recalcLocalAabb();
-        shape = convexShape;
+        auto compoundShape = new btCompoundShape();
+        // auto convexShape = new btConvexHullShape();
+        // esp::physics::BulletBase::constructJoinedConvexShapeFromMeshes(
+        //     Magnum::Matrix4{}, meshGroup, metaData.root, convexShape);
+
+        // const Magnum::Matrix4& transformFromParentToWorld,
+        // const std::vector<assets::CollisionMeshData>& meshGroup,
+        // const assets::MeshTransformNode& node,
+        // bool join,
+        // btCompoundShape* bObjectShape
+
+        // temp mem leak
+        auto* bObjectConvexShapes =
+            new std::vector<std::unique_ptr<btConvexHullShape>>();
+        esp::physics::BulletBase::constructConvexShapesFromMeshes(
+            Magnum::Matrix4{}, meshGroup, metaData.root, false, compoundShape,
+            *bObjectConvexShapes);
+
+        CORRADE_INTERNAL_ASSERT(collision->m_geometry.m_meshScale ==
+                                Mn::Vector3(1.f, 1.f, 1.f));
+        // convexShape->setLocalScaling(
+        //     btVector3(collision->m_geometry.m_meshScale));
+        // convexShape->recalcLocalAabb();
+        shape = compoundShape;
         shape->setMargin(gUrdfDefaultCollisionMargin);
       } else {
         Mn::Debug{}
