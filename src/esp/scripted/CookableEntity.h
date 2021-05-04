@@ -17,7 +17,11 @@ namespace scripted {
 
 class CookableEntity {
  public:
+  struct Blueprint {
+    float targetCookTime = 10.f;
+  };
   CookableEntity(esp::sim::Simulator* sim,
+                 const CookableEntity::Blueprint& bp,
                  const Magnum::Vector3& translation,
                  const Magnum::Quaternion& rotation);
 
@@ -29,6 +33,7 @@ class CookableEntity {
                    esp::gfx::DebugRender& debugRender);
 
  private:
+  Blueprint bp_;
   int objId_ = -1;
   esp::sim::Simulator* sim_ = nullptr;
   float cookTime_ = 0.f;
