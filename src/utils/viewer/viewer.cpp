@@ -474,6 +474,31 @@ float moveTo(float src, float target, float maxStep) {
   return src > target ? src - maxStep : src + maxStep;
 }
 
+void mapHitObjectIdToArtObject(esp::sim::Simulator* simulator,
+                               int objectId,
+                               int& hitArticulatedObjectId,
+                               int& hitArticulatedLinkIndex) {
+  CORRADE_INTERNAL_ASSERT(objectId != esp::ID_UNDEFINED);
+
+  bool hitArticulatedObject = false;
+  // TODO: determine if this is true (link id?)
+  hitArticulatedObjectId = esp::ID_UNDEFINED;
+  hitArticulatedLinkIndex = esp::ID_UNDEFINED;
+  // TODO: get this info from link?
+  for (auto aoId : simulator->getExistingArticulatedObjectIDs()) {
+    if (aoId == objectId) {
+      // grabbed the base link
+      hitArticulatedObject = true;
+      hitArticulatedObjectId = aoId;
+    } else if (simulator->getObjectIdsToLinkIds(aoId).count(objectId) > 0) {
+      hitArticulatedObject = true;
+      hitArticulatedObjectId = aoId;
+      hitArticulatedLinkIndex =
+          simulator->getObjectIdsToLinkIds(aoId).at(objectId);
+    }
+  }
+}
+
 class SpawnerGrabber {
  public:
   SpawnerGrabber(esp::sim::Simulator* simulator) : simulator_(simulator) {
@@ -535,28 +560,53 @@ class SpawnerGrabber {
           raycastResults.hasHits() ? raycastResults.hits[0].objectId : -1;
 
       if (hitObjId != -1) {
-        handRecord_.heldObjId = hitObjId;
+        int artObjId = -1;
+        int artLinkId = -1;
+        mapHitObjectIdToArtObject(simulator_, hitObjId, artObjId, artLinkId);
+        if (artObjId != esp::ID_UNDEFINED) {
+          if (artLinkId == esp::ID_UNDEFINED) {
+            handRecord_.heldArtObjId = artObjId;
 
-        auto currTrans = simulator_->getTranslation(handRecord_.heldObjId);
-        auto currRot = simulator_->getRotation(handRecord_.heldObjId);
+            const auto transform = simulator_->getArticulatedObjectRootState(
+                handRecord_.heldArtObjId);
+            auto currTrans = transform.translation();
+            auto currRot =
+                Mn::Quaternion::fromMatrix(transform.rotationScaling());
 
-        auto handRotInverted = handRot.inverted();
-        handRecord_.heldRelRot = handRotInverted * currRot;
-        handRecord_.heldRelTrans =
-            handRotInverted.transformVector(currTrans - handPos);
+            auto handRotInverted = handRot.inverted();
+            handRecord_.heldRelRot = handRotInverted * currRot;
+            handRecord_.heldRelTrans =
+                handRotInverted.transformVector(currTrans - handPos);
 
-        // set held obj to kinematic
-        handRecord_.heldMotionType =
-            simulator_->getObjectMotionType(handRecord_.heldObjId);
-        simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
-                                        handRecord_.heldObjId);
+          } else {
+            const auto& hitPos = raycastResults.hits[0].point;
+            handRecord_.p2pId = simulator_->createArticulatedP2PConstraint(
+                artObjId, artLinkId, hitPos);
+          }
+        } else {
+          handRecord_.heldObjId = hitObjId;
+
+          auto currTrans = simulator_->getTranslation(handRecord_.heldObjId);
+          auto currRot = simulator_->getRotation(handRecord_.heldObjId);
+
+          auto handRotInverted = handRot.inverted();
+          handRecord_.heldRelRot = handRotInverted * currRot;
+          handRecord_.heldRelTrans =
+              handRotInverted.transformVector(currTrans - handPos);
+
+          // set held obj to kinematic
+          handRecord_.heldMotionType =
+              simulator_->getObjectMotionType(handRecord_.heldObjId);
+          simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                          handRecord_.heldObjId);
+        }
       }
     }
 
-    // update held object pose
+    // update held object update
     if (handRecord_.heldObjId != -1) {
-      auto pad = std::min(0.5f, std::max(0.3f, palmFacingDir.y())) * 0.05 *
-                 palmFacingSign;
+      auto pad = 0.f;  // std::min(0.5f, std::max(0.3f, palmFacingDir.y())) *
+                       // 0.05 * palmFacingSign;
       auto adjustedRelTrans =
           handRecord_.heldRelTrans + Mn::Vector3(pad, 0.0, 0.0);
 
@@ -567,7 +617,28 @@ class SpawnerGrabber {
                               handRecord_.heldObjId);
     }
 
-    // handle release
+    // update held art object update
+    if (handRecord_.heldArtObjId != -1) {
+      auto pad = 0.f;  // std::min(0.5f, std::max(0.3f, palmFacingDir.y())) *
+                       // 0.05 * palmFacingSign;
+      auto adjustedRelTrans =
+          handRecord_.heldRelTrans + Mn::Vector3(pad, 0.0, 0.0);
+
+      auto translation = handPos + handRot.transformVector(adjustedRelTrans);
+      auto rotation = handRot * handRecord_.heldRelRot;
+      Mn::Matrix4 transform =
+          Mn::Matrix4::from(rotation.toMatrix(), translation);
+
+      simulator_->setArticulatedObjectRootState(handRecord_.heldArtObjId,
+                                                transform);
+    }
+
+    // update grabbed art link update
+    if (handRecord_.p2pId != -1) {
+      simulator_->updateP2PConstraintPivot(handRecord_.p2pId, handPos);
+    }
+
+    // handle object release
     if (handRecord_.heldObjId != -1 && !buttonStates[0]) {
       // print transform
       auto trans = simulator_->getTranslation(handRecord_.heldObjId);
@@ -581,6 +652,32 @@ class SpawnerGrabber {
       simulator_->setObjectMotionType(handRecord_.heldMotionType,
                                       handRecord_.heldObjId);
       handRecord_.heldObjId = -1;
+
+      isFineTuningHand =
+          false;  // sloppy: turn this off here after processing release
+    }
+
+    // handle art object release
+    if (handRecord_.heldArtObjId != -1 && !buttonStates[0]) {
+      const auto transform =
+          simulator_->getArticulatedObjectRootState(handRecord_.heldArtObjId);
+      auto trans = transform.translation();
+      auto rot = Mn::Quaternion::fromMatrix(transform.rotationScaling());
+      LOG(INFO) << "trans: {" << trans.x() << "," << trans.y() << ","
+                << trans.z() << "}";
+      LOG(INFO) << "rot: {{" << rot.vector().x() << "," << rot.vector().y()
+                << "," << rot.vector().z() << "}," << rot.scalar() << "}";
+
+      handRecord_.heldArtObjId = -1;
+
+      isFineTuningHand =
+          false;  // sloppy: turn this off here after processing release
+    }
+
+    // handle art link release
+    if (handRecord_.p2pId != -1 && !buttonStates[0]) {
+      simulator_->removeConstraint(handRecord_.p2pId);
+      handRecord_.p2pId = -1;
 
       isFineTuningHand =
           false;  // sloppy: turn this off here after processing release
@@ -609,7 +706,8 @@ class SpawnerGrabber {
       const float radius = (range.max() - range.min()).length() * fudgeScale;
 
       esp::geo::Ray ray;
-      ray.origin = simulator_->getTranslation(handRecord_.heldObjId);
+      ray.origin = simulator_->getTranslation(handRecord_.heldObjId) +
+                   Mn::Vector3(0.f, 0.01f, 0.f);
       ray.direction = Mn::Vector3(0.f, -1.f, 0.f);
       constexpr float maxDistance = 5.f;
       auto raycastResults = simulator_->castRay(ray, maxDistance);
@@ -639,6 +737,8 @@ class SpawnerGrabber {
     int stickObjId = -1;
     std::vector<bool> prevButtonStates = {false, false};
     int heldObjId = -1;
+    int heldArtObjId = -1;
+    int p2pId = -1;  // grabbed art link
     esp::physics::MotionType heldMotionType;
     Mn::Quaternion heldRelRot;
     Mn::Vector3 heldRelTrans;
@@ -1572,8 +1672,10 @@ int Viewer::addArticulatedObject(std::string urdfFilename,
                                  bool fixedBase,
                                  float globalScale) {
   int articulatedObjectId = simulator_->addArticulatedObjectFromURDF(
-      urdfFilename, fixedBase, globalScale);
-  placeArticulatedObjectAgentFront(articulatedObjectId);
+      urdfFilename, fixedBase, globalScale, 1.f, true);
+  if (articulatedObjectId != -1) {
+    placeArticulatedObjectAgentFront(articulatedObjectId);
+  }
   return articulatedObjectId;
 }
 
