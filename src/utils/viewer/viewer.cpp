@@ -929,7 +929,7 @@ Viewer::Viewer(const Arguments& arguments)
   simConfig.sceneDatasetConfigFile = args.value("dataset");
   LOG(INFO) << "Dataset : " << simConfig.sceneDatasetConfigFile;
   simConfig.enablePhysics = useBullet;
-  simConfig.frustumCulling = true;
+  simConfig.frustumCulling = false;  // temp hack
   simConfig.requiresTextures = true;
   simConfig.enableGfxReplaySave = !gfxReplayRecordFilepath_.empty();
   if (args.isSet("stage-requires-lighting")) {
