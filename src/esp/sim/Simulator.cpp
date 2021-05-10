@@ -865,7 +865,8 @@ double Simulator::stepWorld(const double dt) {
     physicsManager_->updateNodes();
   }
 
-  // temp force replay recording and periodic writing to disk
+#if 0
+  // temp force replay recording and periodic writing to disk; this only works well if you're not consolidating frames after writing (see Recorder::writeSavedKeyframesToFile)
   {
     const auto recorder = getGfxReplayManager()->getRecorder();
     if (recorder) {
@@ -878,6 +879,8 @@ double Simulator::stepWorld(const double dt) {
       }
     }
   }
+#endif
+
   return getWorldTime();
 }
 
