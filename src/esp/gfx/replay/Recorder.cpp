@@ -166,10 +166,7 @@ void Recorder::writeSavedKeyframesToFile(const std::string& filepath) {
   auto document = writeKeyframesToJsonDocument();
   esp::io::writeJsonToFile(document, filepath);
 
-  // temp disable consolidate, such that each writeSavedKeyframesToFile writes
-  // all saved keyframes since step 0
-
-  // consolidateSavedKeyframes();
+  consolidateSavedKeyframes();
 }
 
 std::string Recorder::writeSavedKeyframesToString() {
