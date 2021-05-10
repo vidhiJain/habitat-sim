@@ -58,6 +58,8 @@
 #include "ObjectPickingHelper.h"
 #include "esp/physics/configure.h"
 
+#include "esp/io/JsonAllTypes.h"
+
 // for ease of access
 namespace Cr = Corrade;
 namespace Mn = Magnum;
@@ -453,6 +455,18 @@ std::string getCurrentTimeString() {
          std::to_string(ltm->tm_min) + "-" + std::to_string(ltm->tm_sec);
 }
 
+struct CameraSplinePoint {
+  Mn::Vector3 pos;
+  Mn::Vector3 lookat;
+};
+
+inline bool fromJsonValue(const esp::io::JsonGenericValue& obj,
+                          CameraSplinePoint& x) {
+  esp::io::readMember(obj, "pos", x.pos);
+  esp::io::readMember(obj, "lookat", x.lookat);
+  return true;
+}
+
 using namespace Mn::Math::Literals;
 using Magnum::Math::Literals::operator""_degf;
 
@@ -568,6 +582,7 @@ class Viewer : public Mn::Platform::Application {
   }
 
   void reloadLights();
+  void reloadCameraSpline();
 
   std::string helpText = R"(
 ==================================================
@@ -759,6 +774,8 @@ Key Commands:
 
   std::shared_ptr<esp::gfx::replay::Player> player_;
   float ycbLightColorScale_ = 4.f;
+
+  std::vector<CameraSplinePoint> cameraSpline_;
 };
 
 void addSensors(esp::agent::AgentConfiguration& agentConfig,
@@ -2237,6 +2254,24 @@ void Viewer::keyPressEvent(KeyEvent& event) {
             (event.modifiers() & MouseEvent::Modifier::Shift) ? 60 : 1;
         player_->setKeyframeIndex(
             std::max(player_->getKeyframeIndex() - stepSize, 0));
+
+        // find relevant range of control points
+        {
+          // construct quad bezier from three points
+
+          Mn::QuadraticBezier3D posA{cameraSpline_[0].pos, cameraSpline_[1].pos,
+                                     cameraSpline_[2].pos};
+
+          Mn::QuadraticBezier3D lookatA{cameraSpline_[0].lookat,
+                                        cameraSpline_[1].lookat,
+                                        cameraSpline_[2].lookat};
+
+          constexpr float stepSize = 1.0 / 50;
+          for (float t = 0; t < 1; t += stepSize) {
+          }
+        }
+        // place camera along spline
+        float fraction =
       }
       break;
     case KeyEvent::Key::RightBracket:
@@ -2395,6 +2430,24 @@ void Viewer::setupDemoFurniture() {
                  7, 6, 0.5, 0),
     };
   }
+}
+
+void Viewer::reloadCameraSpline() {
+  const std::string splineFilepath_ = "spline.json";
+  if (splineFilepath_.empty()) {
+    return;
+  }
+  esp::io::JsonDocument d;
+  try {
+    d = esp::io::parseJsonFile(splineFilepath_);
+  } catch (...) {
+    LOG(INFO) << splineFilepath_ << " parse failed";
+    return;
+  }
+
+  cameraSpline_.clear();
+
+  esp::io::readMember(d, "points", cameraSpline_);
 }
 
 void Viewer::reloadLights() {
