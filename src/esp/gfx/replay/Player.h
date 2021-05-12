@@ -84,6 +84,10 @@ class Player {
                         Magnum::Vector3* translation,
                         Magnum::Quaternion* rotation) const;
 
+  bool hackGetInstanceTranform(int instance,
+                               int frameIndex,
+                               Magnum::Vector3* translation,
+                               Magnum::Quaternion* rotation) const;
   /**
    * @brief Unload all keyframes.
    */

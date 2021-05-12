@@ -82,6 +82,32 @@ bool Player::getUserTransform(const std::string& name,
   }
 }
 
+bool Player::hackGetInstanceTranform(int instance,
+                                     int frameIndex,
+                                     Magnum::Vector3* translation,
+                                     Magnum::Quaternion* rotation) const {
+  ASSERT(frameIndex_ >= 0 && frameIndex_ < getNumKeyframes());
+  Mn::Vector3 trans(Mn::Math::ZeroInit);
+  bool found = false;
+  for (int index = frameIndex; index >= 0; index--) {
+    const Keyframe& keyframe = keyframes_[index];
+    for (const auto& pair : keyframe.stateUpdates) {
+      if (pair.first == instance) {
+        *translation = pair.second.absTransform.translation;
+        *rotation = pair.second.absTransform.rotation;
+        found = true;
+        break;
+      }
+    }
+
+    if (found) {
+      break;
+    }
+  }
+
+  return found;
+}
+
 void Player::close() {
   clearFrame();
   keyframes_.clear();

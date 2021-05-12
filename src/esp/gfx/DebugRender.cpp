@@ -48,15 +48,39 @@ void DebugRender::flushLines() {
 
   // Update shader
   _mesh.setCount(_bufferData.size());
+
+  static bool enableSmooth = false;
+  if (enableSmooth) {
+    glEnable(GL_LINE_SMOOTH);
+  } else {
+    glDisable(GL_LINE_SMOOTH);
+  }
+  static float lineWidth = 2.5;
+  glLineWidth(lineWidth);
+
+#if 0
   _shader.setTransformationProjectionMatrix(_transformationProjectionMatrix);
 
   // draw normal
   _shader.draw(_mesh);
+#endif
+
+#if 1
+  static float x = 0.0015;
+  for (const auto& offset : {Mn::Vector3(x, x, 0), Mn::Vector3(-x, x, 0),
+                             Mn::Vector3(x, -x, 0), Mn::Vector3(-x, -x, 0)}) {
+    // static Mn::Vector3 offset0(0.0025, 0.0025, 0);
+    Magnum::Matrix4 offset0mat = Mn::Matrix4::translation(offset);
+    _shader.setTransformationProjectionMatrix(offset0mat *
+                                              _transformationProjectionMatrix);
+    _shader.draw(_mesh);
+  }
+#endif
 
   // modify all colors to be semi-transparent
   // perf todo: do a custom shader constant for opacity instead so we don't have
   // to touch all the verts
-  constexpr float opacity = 0.25;
+  static float opacity = 0.1;
   for (int v = 0; v < _bufferData.size(); v++) {
     _bufferData[v].color.w() *= opacity;
   }
@@ -64,7 +88,19 @@ void DebugRender::flushLines() {
 
   Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Greater);
 
+#if 0
   _shader.draw(_mesh);
+#endif
+#if 1
+  for (const auto& offset : {Mn::Vector3(x, x, 0), Mn::Vector3(-x, x, 0),
+                             Mn::Vector3(x, -x, 0), Mn::Vector3(-x, -x, 0)}) {
+    // static Mn::Vector3 offset0(0.0025, 0.0025, 0);
+    Magnum::Matrix4 offset0mat = Mn::Matrix4::translation(offset);
+    _shader.setTransformationProjectionMatrix(offset0mat *
+                                              _transformationProjectionMatrix);
+    _shader.draw(_mesh);
+  }
+#endif
 
   Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
 

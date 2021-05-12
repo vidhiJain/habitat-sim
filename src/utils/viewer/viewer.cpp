@@ -59,6 +59,7 @@
 #include "ObjectPickingHelper.h"
 #include "esp/physics/configure.h"
 
+#include "Magnum/Animation/Interpolation.h"
 #include "esp/io/JsonAllTypes.h"
 
 // for ease of access
@@ -457,14 +458,24 @@ std::string getCurrentTimeString() {
 }
 
 struct CameraSplinePoint {
+  float time;
+  int timeScale;
+  float fov;
   Mn::Vector3 pos;
+  Mn::Vector3 posPlusTangent;
   Mn::Vector3 lookat;
+  Mn::Vector3 lookatPlusTangent;
 };
 
 inline bool fromJsonValue(const esp::io::JsonGenericValue& obj,
                           CameraSplinePoint& x) {
+  esp::io::readMember(obj, "time", x.time);
+  esp::io::readMember(obj, "timeScale", x.timeScale);
+  esp::io::readMember(obj, "fov", x.fov);
   esp::io::readMember(obj, "pos", x.pos);
+  esp::io::readMember(obj, "posPlusTangent", x.posPlusTangent);
   esp::io::readMember(obj, "lookat", x.lookat);
+  esp::io::readMember(obj, "lookatPlusTangent", x.lookatPlusTangent);
   return true;
 }
 
@@ -583,7 +594,9 @@ class Viewer : public Mn::Platform::Application {
   }
 
   void reloadLights();
+  void reloadReplay();
   void reloadCameraSpline();
+  void updateCameraFromSpline();
 
   std::string helpText = R"(
 ==================================================
@@ -643,6 +656,7 @@ Key Commands:
   // single inline for logging agent state msgs, so can be easily modified
   inline void showAgentStateMsg(bool showPos, bool showOrient) {
     std::stringstream strDat("");
+#if 0
     if (showPos) {
       strDat << "Agent position "
              << Eigen::Map<esp::vec3f>(agentBodyNode_->translation().data())
@@ -652,6 +666,36 @@ Key Commands:
       strDat << "Agent orientation "
              << esp::quatf(agentBodyNode_->rotation()).coeffs().transpose();
     }
+#endif
+
+    const auto& transform = renderCamera_->node().absoluteTransformation();
+    static Mn::Vector3 lookatLocal(0.f, 0.f, -1.f);
+    Mn::Vector3 lookat = transform.transformPoint(lookatLocal);
+
+    // {"time": 1.0, "pos": [0, 2.15729, -1.28764], "posPlusTangent":
+    // [0, 2.15729, -1.28764], "lookat": [-0.180384, 1.91264, -0.458146],
+    // "lookatPlusTangent": [-0.180384, 1.91264, -0.45814]}
+    strDat << "keyframe: " << player_->getKeyframeIndex() << std::endl;
+
+    float globalT =
+        float(player_->getKeyframeIndex()) / (player_->getNumKeyframes() - 1);
+    strDat << "{\"time\": " << globalT;
+
+    strDat << ", \"fov\": " << float(getAgentCamera().getFOV());
+
+    strDat << ", \"pos\": [" << transform.translation().x() << ", "
+           << transform.translation().y() << ", " << transform.translation().z()
+           << "]";
+
+    strDat << ", \"posPlusTangent\": [" << transform.translation().x() << ", "
+           << transform.translation().y() << ", " << transform.translation().z()
+           << "]";
+
+    strDat << ", \"lookat\": [" << lookat.x() << ", " << lookat.y() << ", "
+           << lookat.z() << "]";
+
+    strDat << ", \"lookatPlusTangent\": [" << lookat.x() << ", " << lookat.y()
+           << ", " << lookat.z() << "]},";
 
     auto str = strDat.str();
     if (str.size() > 0) {
@@ -775,6 +819,7 @@ Key Commands:
 
   std::shared_ptr<esp::gfx::replay::Player> player_;
   float ycbLightColorScale_ = 4.f;
+  int playerTimeScale_ = 1;
 
   esp::gfx::DebugRender debugRender_;
 
@@ -859,7 +904,7 @@ Viewer::Viewer(const Arguments& arguments)
           arguments,
           Configuration{}
               .setTitle("Viewer")
-              .setSize(Mn::Vector2i(1024, 768))
+              .setSize(Mn::Vector2i(1284, 724))
               .setWindowFlags(Configuration::WindowFlag::Resizable),
           GLConfiguration{}
               .setColorBufferSize(Mn::Vector4i(8, 8, 8, 8))
@@ -1087,15 +1132,7 @@ Viewer::Viewer(const Arguments& arguments)
   // Per frame profiler will average measurements taken over previous 50 frames
   profiler_.setup(profilerValues, 50);
 
-  if (!gfxReplayPlaybackFilepath_.empty()) {
-    player_ = simulator_->getGfxReplayManager()->readKeyframesFromFile(
-        gfxReplayPlaybackFilepath_);
-    if (player_) {
-      player_->setKeyframeIndex(0);
-    } else {
-      LOG(WARNING) << "Failed to load replay " << gfxReplayPlaybackFilepath_;
-    }
-  }
+  reloadReplay();
 
   reloadLights();
 
@@ -1469,6 +1506,27 @@ void Viewer::drawEvent() {
       if (recorder) {
         recorder->saveKeyframe();
       }
+
+      if (player_) {
+        int stepSize = 1;
+        stepSize *= playerTimeScale_;
+        static int endKeyframe = std::min(1441, player_->getNumKeyframes());
+
+        // messy code to play 1x speed at 30 fps (every other frame) and 2x or
+        // higher speed at 60fps
+        static bool adjust = false;
+        if (adjust) {
+          player_->setKeyframeIndex(std::min(
+              player_->getKeyframeIndex() + (stepSize + 1) / 2, endKeyframe));
+
+        } else {
+          player_->setKeyframeIndex(std::min(
+              player_->getKeyframeIndex() + (stepSize / 2), endKeyframe));
+        }
+        adjust = !adjust;
+
+        updateCameraFromSpline();
+      }
     }
     // reset timeSinceLastSimulation, accounting for potential overflow
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
@@ -1478,6 +1536,7 @@ void Viewer::drawEvent() {
       static int counter = 0;
       if (counter++ == 60) {
         reloadLights();
+        reloadCameraSpline();
         counter = 0;
       }
     }
@@ -1498,6 +1557,112 @@ void Viewer::drawEvent() {
       debugRender_.popInputTransform();
     }
   }
+
+  {
+    int currIndex = player_->getKeyframeIndex();
+    static int hackInstance =
+        3682;  // find this by manually inspecting your replay json
+    static int lastStartKeyframe =
+        484;  // target moves to end pos after this frame
+    static int endKeyframe =
+        832;  // find keyframes by viewing the replay in the viewer and hitting
+              // 'q' to print the current frame
+    int queryKeyframe = currIndex <= lastStartKeyframe
+                            ? player_->getKeyframeIndex()
+                            : endKeyframe;
+    Mn::Vector3 trans;
+    Mn::Quaternion rot;
+    player_->hackGetInstanceTranform(hackInstance, queryKeyframe, &trans, &rot);
+    Mn::Matrix4 transform = Mn::Matrix4::from(rot.toMatrix(), trans);
+
+    // hard-coded offset to object center
+    static float centerLocalArray[] = {
+        0.0, -0.02, 0.08};  // <-- sugar box // {-0.014, -0.03, 0.0} <-- bowl
+    const Mn::Vector3 centerLocal(centerLocalArray[0], centerLocalArray[1],
+                                  centerLocalArray[2]);
+    auto center = transform.transformPoint(centerLocal);
+
+    static float radius = 0.13;
+    static int numSegments = 48;
+    static int fadeoutPad = 80;
+
+    Mn::Color4 color = Mn::Color4(1, 0, 0);
+
+    color.a() = std::max(
+        0.0, 1.0 - ((float)std::max(currIndex - endKeyframe, 0) / fadeoutPad));
+
+    debugRender_.drawCircle(center, Mn::Vector3(0, 1, 0), radius, numSegments,
+                            color);
+  }
+
+  {
+    static std::pair<int, int> pathingKeyframeRanges[] = {
+        {0, 76}, {605, 694}, {938, 1016}, {1296, 1320}};
+    static int robotBaseInstance =
+        33;  // find in the replay json; for fetch, this is base_link.dae
+    int currIndex = player_->getKeyframeIndex();
+    Mn::Color4 color(0.0, 0.27, 0.41);
+    static int fadeoutPad = 20;
+    for (const auto& range : pathingKeyframeRanges) {
+      if (currIndex >= range.first && currIndex < range.second + fadeoutPad) {
+        color.a() = std::max(
+            0.0,
+            1.0 - ((float)std::max(currIndex - range.second, 0) / fadeoutPad));
+
+        // draw this range
+
+        static float radius = 0.08;
+        static int numSegments = 48;
+        Mn::Vector3 pos0;
+        Mn::Vector3 pos1;
+        Mn::Quaternion rot;
+        player_->hackGetInstanceTranform(robotBaseInstance, range.first, &pos0,
+                                         &rot);
+        debugRender_.drawCircle(pos0, Mn::Vector3(0, 1, 0), radius, numSegments,
+                                color);
+        player_->hackGetInstanceTranform(robotBaseInstance, range.second - 1,
+                                         &pos1, &rot);
+        debugRender_.drawCircle(pos1, Mn::Vector3(0, 1, 0), radius, numSegments,
+                                color);
+
+        Mn::Vector3 prevPos;
+        for (int i = std::max(00, range.first);
+             i < range.second && i < player_->getNumKeyframes(); i++) {
+          Mn::Vector3 pos;
+          player_->hackGetInstanceTranform(robotBaseInstance, i, &pos, &rot);
+          if (i > range.first) {
+            if ((prevPos - pos0).length() > radius &&
+                (prevPos - pos1).length() > radius &&
+                (pos - pos0).length() > radius &&
+                (pos - pos1).length() > radius) {
+              debugRender_.drawLine(prevPos, pos, color);
+            }
+          }
+          prevPos = pos;
+        }
+      }
+    }
+  }
+
+#if 0
+  {
+    // construct quad bezier from three points
+    if (cameraSpline_.size() >= 3) {
+
+      Mn::QuadraticBezier3D posA{cameraSpline_[0].pos, cameraSpline_[1].pos,
+                                  cameraSpline_[2].pos};
+
+      Mn::QuadraticBezier3D lookatA{cameraSpline_[0].lookat,
+                                    cameraSpline_[1].lookat,
+                                    cameraSpline_[2].lookat};
+
+      constexpr float stepSize = 1.0 / 50;
+      for (float t = 0; t < 1; t += stepSize) {
+        debugRender_.drawLine(posA.value(t), lookatA.value(t), Mn::Color3::red(), Mn::Color3::green());
+      }
+    }
+  }
+#endif
 
   uint32_t visibles = renderCamera_->getPreviousNumVisibleDrawables();
 
@@ -1630,6 +1795,21 @@ void Viewer::drawEvent() {
     std::string modeText =
         "Mouse Ineraction Mode: " + getEnumName(mouseInteractionMode);
     ImGui::Text("%s", modeText.c_str());
+    ImGui::End();
+  }
+
+  {
+    static int offsetX =
+        0;  // 0 for 16:9 aspect, 310 for square aspect, 180 for 4:3 aspect
+            // (zoomed out once with mouse wheel)
+    static int offsetY = 684;
+    ImGui::SetNextWindowPos(ImVec2(offsetX, offsetY));
+    ImGui::Begin("main", NULL,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_AlwaysAutoResize);
+    static float fontScale = 2.0;
+    ImGui::SetWindowFontScale(fontScale);
+    ImGui::Text((std::to_string(playerTimeScale_) + "x").c_str());
     ImGui::End();
   }
 
@@ -1934,25 +2114,12 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
     return;
   }
 
-  if (mouseGrabber_ != nullptr) {
-    // adjust the depth
-    auto ray = renderCamera_->unproject(event.position());
-    mouseGrabber_->gripDepth += event.offset().y() * 0.01;
-    mouseGrabber_->target = renderCamera_->node().absoluteTranslation() +
-                            ray.direction * mouseGrabber_->gripDepth;
-    mouseGrabber_->updatePivotB(mouseGrabber_->target);
-    // update click visualization
-    simulator_->setTranslation(mouseGrabber_->target, clickVisObjectID_);
-  } else {
-    // change the mouse interaction mode
-    int delta = 1;
-    if (event.offset().y() < 0)
-      delta = -1;
-    mouseInteractionMode = MouseInteractionMode(
-        (int(mouseInteractionMode) + delta) % int(NUM_MODES));
-    if (mouseInteractionMode < 0)
-      mouseInteractionMode = MouseInteractionMode(int(NUM_MODES) - 1);
-  }
+  // Use shift for fine-grained zooming
+  float modVal = (event.modifiers() & MouseEvent::Modifier::Shift) ? 1.01 : 1.1;
+  float mod = scrollModVal > 0 ? modVal : 1.0 / modVal;
+  auto& cam = getAgentCamera();
+  cam.modifyZoom(mod);
+  redraw();
 
   event.setAccepted();
 }  // Viewer::mouseScrollEvent
@@ -2231,6 +2398,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
           simulator_->getExistingArticulatedObjectIDs().back(), 9, 10);
       locobotControllers.push_back(std::move(locobotController));
     } break;
+    case KeyEvent::Key::Six:
+      reloadReplay();
+      break;
+
     case KeyEvent::Key::Five: {
       // reset the scene
       clearAllObjects();
@@ -2278,37 +2449,23 @@ void Viewer::keyPressEvent(KeyEvent& event) {
 
     case KeyEvent::Key::LeftBracket:
       if (player_) {
-        const int stepSize =
+        int stepSize =
             (event.modifiers() & MouseEvent::Modifier::Shift) ? 60 : 1;
+        stepSize *= playerTimeScale_;
         player_->setKeyframeIndex(
             std::max(player_->getKeyframeIndex() - stepSize, 0));
-
-        // find relevant range of control points
-        {
-          // construct quad bezier from three points
-
-          Mn::QuadraticBezier3D posA{cameraSpline_[0].pos, cameraSpline_[1].pos,
-                                     cameraSpline_[2].pos};
-
-          Mn::QuadraticBezier3D lookatA{cameraSpline_[0].lookat,
-                                        cameraSpline_[1].lookat,
-                                        cameraSpline_[2].lookat};
-
-          constexpr float stepSize = 1.0 / 50;
-          for (float t = 0; t < 1; t += stepSize) {
-          }
-        }
-        // place camera along spline
-        float fraction =
+        updateCameraFromSpline();
       }
       break;
     case KeyEvent::Key::RightBracket:
       if (player_) {
-        const int stepSize =
+        int stepSize =
             (event.modifiers() & MouseEvent::Modifier::Shift) ? 60 : 1;
+        stepSize *= playerTimeScale_;
+        static int endKeyframe = std::min(1441, player_->getNumKeyframes());
         player_->setKeyframeIndex(
-            std::min(player_->getKeyframeIndex() + stepSize,
-                     player_->getNumKeyframes() - 1));
+            std::min(player_->getKeyframeIndex() + stepSize, endKeyframe));
+        updateCameraFromSpline();
       }
       break;
 
@@ -2460,8 +2617,22 @@ void Viewer::setupDemoFurniture() {
   }
 }
 
+void Viewer::reloadReplay() {
+  int oldIndex = player_ ? player_->getKeyframeIndex() : 0;
+
+  if (!gfxReplayPlaybackFilepath_.empty()) {
+    player_ = simulator_->getGfxReplayManager()->readKeyframesFromFile(
+        gfxReplayPlaybackFilepath_);
+    if (player_) {
+      player_->setKeyframeIndex(oldIndex);
+    } else {
+      LOG(WARNING) << "Failed to load replay " << gfxReplayPlaybackFilepath_;
+    }
+  }
+}
+
 void Viewer::reloadCameraSpline() {
-  const std::string splineFilepath_ = "spline.json";
+  const std::string splineFilepath_ = "my_camera_spline.json";
   if (splineFilepath_.empty()) {
     return;
   }
@@ -2476,6 +2647,58 @@ void Viewer::reloadCameraSpline() {
   cameraSpline_.clear();
 
   esp::io::readMember(d, "points", cameraSpline_);
+}
+
+void Viewer::updateCameraFromSpline() {
+  if (cameraSpline_.size() < 2) {
+    return;
+  }
+
+  float globalT =
+      float(player_->getKeyframeIndex()) / (player_->getNumKeyframes() - 1);
+
+  // find correct pair of points
+  globalT = Mn::Math::clamp(globalT, cameraSpline_.front().time,
+                            cameraSpline_.back().time);
+  int i;
+  for (i = 1; i < cameraSpline_.size(); i++) {
+    if (cameraSpline_[i].time >= globalT) {
+      break;
+    }
+  }
+
+  const auto& ptA = cameraSpline_[i - 1];
+  const auto& ptB = cameraSpline_[i - 0];
+
+  float localT = (globalT - ptA.time) / (ptB.time - ptA.time);
+
+  Mn::CubicHermite3D posA{ptA.pos - ptA.posPlusTangent, ptA.pos,
+                          -(ptA.pos - ptA.posPlusTangent)};
+  Mn::CubicHermite3D posB{ptB.pos - ptB.posPlusTangent, ptB.pos,
+                          -(ptB.pos - ptB.posPlusTangent)};
+  Mn::Vector3 pos = Mn::Animation::interpolatorFor<Mn::CubicHermite3D>(
+      Mn::Animation::Interpolation::Spline)(posA, posB, localT);
+
+  Mn::CubicHermite3D lookatA{ptA.lookat - ptA.lookatPlusTangent, ptA.lookat,
+                             -(ptA.lookat - ptA.lookatPlusTangent)};
+  Mn::CubicHermite3D lookatB{ptB.lookat - ptB.lookatPlusTangent, ptB.lookat,
+                             -(ptB.lookat - ptB.lookatPlusTangent)};
+  Mn::Vector3 lookat = Mn::Animation::interpolatorFor<Mn::CubicHermite3D>(
+      Mn::Animation::Interpolation::Spline)(lookatA, lookatB, localT);
+
+  constexpr Mn::Vector3 upGuide{0.f, 1.f, 0.f};
+  auto trans = Mn::Matrix4::lookAt(pos, lookat, upGuide);
+  renderCamera_->node().setTransformation(trans);
+  agentBodyNode_->setTransformation(Mn::Matrix4(Mn::Math::IdentityInit));
+
+  Mn::CubicHermite1D fovA{0, ptA.fov, 0};
+  Mn::CubicHermite1D fovB{0, ptB.fov, 0};
+  float fov = Mn::Animation::interpolatorFor<Mn::CubicHermite1D>(
+      Mn::Animation::Interpolation::Spline)(fovA, fovB, localT);
+
+  getAgentCamera().setFOV(Mn::Deg(fov));
+
+  playerTimeScale_ = ptA.timeScale;
 }
 
 void Viewer::reloadLights() {
