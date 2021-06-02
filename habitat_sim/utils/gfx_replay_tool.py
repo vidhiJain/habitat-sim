@@ -87,7 +87,7 @@ def make_video_from_replay(args):
 
     sensor_cfg = habitat_sim.CameraSensorSpec()
     sensor_cfg.resolution = [args.height, args.width]  # todo: expose resolution option
-    # todo: expose fov option
+    sensor_cfg.hfov = float(args.hfov)
     agent_cfg = habitat_sim.agent.AgentConfiguration()  # type: ignore
     agent_cfg.sensor_specifications = [sensor_cfg]
     agents = [agent_cfg]
@@ -212,6 +212,11 @@ def create_arg_parser() -> ArgumentParser:
         "--width",
         default="640",
         help="Video output width",
+    )
+    parser.add_argument(
+        "--hfov",
+        default="90",
+        help="Camera horizontal field of view in degrees",
     )
 
     return parser
