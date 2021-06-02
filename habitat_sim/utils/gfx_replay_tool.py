@@ -86,7 +86,7 @@ def make_video_from_replay(args):
         replay_filepath = do_hack_string_fixes(args)
 
     sensor_cfg = habitat_sim.CameraSensorSpec()
-    sensor_cfg.resolution = [544, 720]  # todo: expose resolution option
+    sensor_cfg.resolution = [args.height, args.width]  # todo: expose resolution option
     # todo: expose fov option
     agent_cfg = habitat_sim.agent.AgentConfiguration()  # type: ignore
     agent_cfg.sensor_specifications = [sensor_cfg]
@@ -202,6 +202,16 @@ def create_arg_parser() -> ArgumentParser:
         "--camera-name",
         default="camera",
         help='The name of the camera user transform in the replay file. Search for "userTransforms" in the replay json if you\'re not sure.',
+    )
+    parser.add_argument(
+        "--height",
+        default="480",
+        help="Video output height",
+    )
+    parser.add_argument(
+        "--width",
+        default="640",
+        help="Video output width",
     )
 
     return parser
