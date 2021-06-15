@@ -13,7 +13,7 @@ Starting by building the Habitat viewer from source:
 https://github.com/facebookresearch/habitat-sim/blob/master/BUILD_FROM_SOURCE.md
 
 Download the kitchen 3D assets (objects, stage, URDF files):
-https://drive.google.com/file/d/1Lf677jDiEgXN8R2aryxwnlCHPvXAlouA/view?usp=sharing
+https://drive.google.com/file/d/1GsZiCErr4xrXzt4SsK78xDzoKtuT78dU/view?usp=sharing
 
 Unzip and place the files at the following locations:
 - `habitat-sim/data/objects`
