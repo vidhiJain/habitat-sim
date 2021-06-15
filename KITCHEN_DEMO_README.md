@@ -9,7 +9,7 @@ https://cvmlp.slack.com/archives/C01NZ9Z0VKL/p1620079431028700
 
 ## Building and Running
 
-Starting by building the Habitat viewer from source:
+Starting by building the Habitat viewer from source (do *not* install via Conda or Docker):
 https://github.com/facebookresearch/habitat-sim/blob/master/BUILD_FROM_SOURCE.md
 
 Download the kitchen 3D assets (objects, stage, URDF files):
