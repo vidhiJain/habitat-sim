@@ -379,10 +379,6 @@ Key Commands:
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
   bool showFPS_ = true;
 
-  // NOTE: Mouse + shift is to select object on the screen!!
-  void createPickedObjectVisualizer(unsigned int objectId);
-  std::unique_ptr<ObjectPickingHelper> objectPickingHelper_;
-
   enum class VisualizeMode : uint8_t {
     RGBA = 0,
     Depth,
@@ -701,7 +697,6 @@ Viewer::Viewer(const Arguments& arguments)
   args_ = std::move(args);
   createSimulator();
 
-  objectPickingHelper_ = std::make_unique<ObjectPickingHelper>(viewportSize);
   timeline_.start();
 
   /**
@@ -1230,24 +1225,7 @@ void Viewer::drawEvent() {
       CORRADE_ASSERT(sensorRenderTarget,
                      "Error in Viewer::drawEvent: sensor's rendering target "
                      "cannot be nullptr.", );
-      if (objectPickingHelper_->isObjectPicked()) {
-        // we need to immediately draw picked object to the SAME frame buffer
-        // so bind it first
-        // bind the framebuffer
-        sensorRenderTarget->renderReEnter();
 
-        // setup blending function
-        Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::Blending);
-
-        // render the picked object on top of the existing contents
-        esp::gfx::RenderCamera::Flags flags;
-        if (simulator_->isFrustumCullingEnabled()) {
-          flags |= esp::gfx::RenderCamera::Flag::FrustumCulling;
-        }
-        renderCamera_->draw(objectPickingHelper_->getDrawables(), flags);
-
-        Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::Blending);
-      }
       sensorRenderTarget->blitRgbaToDefault();
     } else {
       // ================ NON-regular RGB sensor ==================
@@ -1430,47 +1408,11 @@ void Viewer::viewportEvent(ViewportEvent& event) {
 
   imgui_.relayout(Mn::Vector2{event.windowSize()} / event.dpiScaling(),
                   event.windowSize(), event.framebufferSize());
-
-  objectPickingHelper_->handleViewportChange(event.framebufferSize());
-}
-
-void Viewer::createPickedObjectVisualizer(unsigned int objectId) {
-  for (auto& it : activeSceneGraph_->getDrawableGroups()) {
-    if (it.second.hasDrawable(objectId)) {
-      auto* pickedDrawable = it.second.getDrawable(objectId);
-      objectPickingHelper_->createPickedObjectVisualizer(pickedDrawable);
-      break;
-    }
-  }
 }
 
 void Viewer::mousePressEvent(MouseEvent& event) {
-  if (event.button() == MouseEvent::Button::Right &&
-      (event.modifiers() & MouseEvent::Modifier::Shift)) {
-    // cannot use the default framebuffer, so setup another framebuffer,
-    // also, setup the color attachment for rendering, and remove the
-    // visualizer for the previously picked object
-    objectPickingHelper_->prepareToDraw();
-
-    // redraw the scene on the object picking framebuffer
-    esp::gfx::RenderCamera::Flags flags =
-        esp::gfx::RenderCamera::Flag::UseDrawableIdAsObjectId;
-    if (simulator_->isFrustumCullingEnabled())
-      flags |= esp::gfx::RenderCamera::Flag::FrustumCulling;
-    for (auto& it : activeSceneGraph_->getDrawableGroups()) {
-      renderCamera_->draw(it.second, flags);
-    }
-
-    // Read the object Id
-    unsigned int pickedObject =
-        objectPickingHelper_->getObjectId(event.position(), windowSize());
-
-    // if an object is selected, create a visualizer
-    createPickedObjectVisualizer(pickedObject);
-    return;
-  }  // drawable selection
   // add primitive w/ right click if a collision object is hit by a raycast
-  else if (event.button() == MouseEvent::Button::Right) {
+  if (event.button() == MouseEvent::Button::Right) {
     if (simulator_->getPhysicsSimulationLibrary() !=
         esp::physics::PhysicsManager::PhysicsSimulationLibrary::NoPhysics) {
       auto viewportPoint = event.position();
