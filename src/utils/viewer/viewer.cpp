@@ -174,6 +174,8 @@ class Viewer : public Mn::Platform::Application {
   std::string viewerStartTimeString = getCurrentTimeString();
   void screenshot();
 
+  void createSimulator();
+
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
         agentBodyNode_->getNodeSensorSuite().get("rgba_camera");
@@ -328,6 +330,10 @@ Key Commands:
 
   // The simulator object backend for this viewer instance
   std::unique_ptr<esp::sim::Simulator> simulator_;
+
+  // store these so we can recreate the simulator
+  Cr::Utility::Arguments args_;
+  esp::sim::SimulatorConfiguration simConfig_;
 
   // Toggle physics simulation on/off
   bool simulating_ = true;
@@ -507,6 +513,89 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
                            esp::sensor::SensorType::Semantic);
 }
 
+void Viewer::createSimulator() {
+  auto& args = args_;
+
+  if (simulator_) {
+    simulator_->reconfigure(simConfig_);
+  } else {
+    simulator_ = esp::sim::Simulator::create_unique(simConfig_);
+  }
+
+  objectAttrManager_ = simulator_->getObjectAttributesManager();
+  objectAttrManager_->loadAllJSONConfigsFromPath(args.value("object-dir"));
+  assetAttrManager_ = simulator_->getAssetAttributesManager();
+  stageAttrManager_ = simulator_->getStageAttributesManager();
+  physAttrManager_ = simulator_->getPhysicsAttributesManager();
+
+  // NavMesh customization options
+  if (args.isSet("disable-navmesh")) {
+    if (simulator_->getPathFinder()->isLoaded()) {
+      simulator_->setPathFinder(esp::nav::PathFinder::create());
+    }
+  } else if (args.isSet("recompute-navmesh")) {
+    esp::nav::NavMeshSettings navMeshSettings;
+    simulator_->recomputeNavMesh(*simulator_->getPathFinder().get(),
+                                 navMeshSettings, true);
+  } else if (!args.value("navmesh-file").empty()) {
+    std::string navmeshFile = Cr::Utility::Directory::join(
+        Corrade::Utility::Directory::current(), args.value("navmesh-file"));
+    if (Cr::Utility::Directory::exists(navmeshFile)) {
+      simulator_->getPathFinder()->loadNavMesh(navmeshFile);
+    }
+  }
+
+  // configure and initialize default Agent and Sensor
+  auto agentConfig = esp::agent::AgentConfiguration();
+  agentConfig.height = rgbSensorHeight;
+  agentConfig.actionSpace = {
+      // setup viewer action space
+      {"moveForward",
+       esp::agent::ActionSpec::create(
+           "moveForward",
+           esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"moveBackward",
+       esp::agent::ActionSpec::create(
+           "moveBackward",
+           esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"moveLeft",
+       esp::agent::ActionSpec::create(
+           "moveLeft", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"moveRight",
+       esp::agent::ActionSpec::create(
+           "moveRight", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"moveDown",
+       esp::agent::ActionSpec::create(
+           "moveDown", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"moveUp",
+       esp::agent::ActionSpec::create(
+           "moveUp", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
+      {"turnLeft",
+       esp::agent::ActionSpec::create(
+           "turnLeft", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
+      {"turnRight",
+       esp::agent::ActionSpec::create(
+           "turnRight", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
+      {"lookUp",
+       esp::agent::ActionSpec::create(
+           "lookUp", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
+      {"lookDown",
+       esp::agent::ActionSpec::create(
+           "lookDown", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
+  };
+
+  addSensors(agentConfig, args);
+  // add selects a random initial state and sets up the default controls and
+  // step filter
+  simulator_->addAgent(agentConfig);
+
+  // Set up camera
+  activeSceneGraph_ = &simulator_->getActiveSceneGraph();
+  defaultAgent_ = simulator_->getAgent(defaultAgentId_);
+  agentBodyNode_ = &defaultAgent_->node();
+  renderCamera_ = getAgentCamera().getRenderCamera();
+}
+
 Viewer::Viewer(const Arguments& arguments)
     : Mn::Platform::Application{
           arguments,
@@ -608,80 +697,9 @@ Viewer::Viewer(const Arguments& arguments)
     simConfig.physicsConfigFile = physicsConfig;
   }
 
-  simulator_ = esp::sim::Simulator::create_unique(simConfig);
-
-  objectAttrManager_ = simulator_->getObjectAttributesManager();
-  objectAttrManager_->loadAllJSONConfigsFromPath(args.value("object-dir"));
-  assetAttrManager_ = simulator_->getAssetAttributesManager();
-  stageAttrManager_ = simulator_->getStageAttributesManager();
-  physAttrManager_ = simulator_->getPhysicsAttributesManager();
-
-  // NavMesh customization options
-  if (args.isSet("disable-navmesh")) {
-    if (simulator_->getPathFinder()->isLoaded()) {
-      simulator_->setPathFinder(esp::nav::PathFinder::create());
-    }
-  } else if (args.isSet("recompute-navmesh")) {
-    esp::nav::NavMeshSettings navMeshSettings;
-    simulator_->recomputeNavMesh(*simulator_->getPathFinder().get(),
-                                 navMeshSettings, true);
-  } else if (!args.value("navmesh-file").empty()) {
-    std::string navmeshFile = Cr::Utility::Directory::join(
-        Corrade::Utility::Directory::current(), args.value("navmesh-file"));
-    if (Cr::Utility::Directory::exists(navmeshFile)) {
-      simulator_->getPathFinder()->loadNavMesh(navmeshFile);
-    }
-  }
-
-  // configure and initialize default Agent and Sensor
-  auto agentConfig = esp::agent::AgentConfiguration();
-  agentConfig.height = rgbSensorHeight;
-  agentConfig.actionSpace = {
-      // setup viewer action space
-      {"moveForward",
-       esp::agent::ActionSpec::create(
-           "moveForward",
-           esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"moveBackward",
-       esp::agent::ActionSpec::create(
-           "moveBackward",
-           esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"moveLeft",
-       esp::agent::ActionSpec::create(
-           "moveLeft", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"moveRight",
-       esp::agent::ActionSpec::create(
-           "moveRight", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"moveDown",
-       esp::agent::ActionSpec::create(
-           "moveDown", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"moveUp",
-       esp::agent::ActionSpec::create(
-           "moveUp", esp::agent::ActuationMap{{"amount", moveSensitivity}})},
-      {"turnLeft",
-       esp::agent::ActionSpec::create(
-           "turnLeft", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
-      {"turnRight",
-       esp::agent::ActionSpec::create(
-           "turnRight", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
-      {"lookUp",
-       esp::agent::ActionSpec::create(
-           "lookUp", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
-      {"lookDown",
-       esp::agent::ActionSpec::create(
-           "lookDown", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
-  };
-
-  addSensors(agentConfig, args);
-  // add selects a random initial state and sets up the default controls and
-  // step filter
-  simulator_->addAgent(agentConfig);
-
-  // Set up camera
-  activeSceneGraph_ = &simulator_->getActiveSceneGraph();
-  defaultAgent_ = simulator_->getAgent(defaultAgentId_);
-  agentBodyNode_ = &defaultAgent_->node();
-  renderCamera_ = getAgentCamera().getRenderCamera();
+  simConfig_ = simConfig;
+  args_ = std::move(args);
+  createSimulator();
 
   objectPickingHelper_ = std::make_unique<ObjectPickingHelper>(viewportSize);
   timeline_.start();
@@ -1544,10 +1562,14 @@ void Viewer::keyPressEvent(KeyEvent& event) {
   const auto key = event.key();
   switch (key) {
     case KeyEvent::Key::R: {
+#if 0
       const auto recorder = simulator_->getGfxReplayManager()->getRecorder();
       if (recorder) {
         recorder->writeSavedKeyframesToFile(gfxReplayRecordFilepath_);
       }
+#endif
+      Mn::Debug{} << "Re-creating Simulator...";
+      createSimulator();
     } break;
     case KeyEvent::Key::Esc:
       /* Using Application::exit(), which exits at the next iteration of the
