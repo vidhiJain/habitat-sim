@@ -26,6 +26,8 @@ set(
   CubeMap.h
   DebugLineRender.cpp
   DebugLineRender.h
+  DebugRender.cpp
+  DebugRender.h
   Renderer.cpp
   Renderer.h
   replay/Keyframe.h
