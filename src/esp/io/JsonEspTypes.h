@@ -15,6 +15,7 @@
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"
 #include "esp/core/Esp.h"
 #include "esp/gfx/replay/Keyframe.h"
+#include "esp/physics/PhysicsKeyframe.h"
 
 namespace esp {
 namespace io {
@@ -203,6 +204,24 @@ inline bool fromJsonValue(const JsonGenericValue& obj,
   readMember(obj, "semanticId", x.semanticId);
   return true;
 }
+
+JsonGenericValue toJsonValue(const esp::physics::RigidObjectKeyframe& x,
+                             JsonAllocator& allocator);
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::RigidObjectKeyframe& x);
+
+JsonGenericValue toJsonValue(const esp::physics::ArticulatedObjectKeyframe& x,
+                             JsonAllocator& allocator);
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::ArticulatedObjectKeyframe& x);
+
+JsonGenericValue toJsonValue(const esp::physics::PhysicsKeyframe& x,
+                             JsonAllocator& allocator);
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::PhysicsKeyframe& x);
 
 JsonGenericValue toJsonValue(const esp::gfx::replay::Keyframe& x,
                              JsonAllocator& allocator);

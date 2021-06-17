@@ -23,6 +23,7 @@ add_library(
   objectWrappers/ManagedPhysicsObjectBase.h
   objectWrappers/ManagedRigidBase.h
   objectWrappers/ManagedRigidObject.h
+  PhysicsKeyframe.h
   PhysicsManager.cpp
   PhysicsManager.h
   PhysicsObjectBase.h

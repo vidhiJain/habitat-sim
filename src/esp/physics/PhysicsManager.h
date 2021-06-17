@@ -31,6 +31,7 @@
 #include "esp/assets/ResourceManager.h"
 #include "esp/gfx/DrawableGroup.h"
 #include "esp/io/URDFParser.h"
+#include "esp/physics/PhysicsKeyframe.h"
 #include "esp/physics/objectWrappers/ManagedArticulatedObject.h"
 #include "esp/physics/objectWrappers/ManagedRigidObject.h"
 #include "esp/scene/SceneNode.h"
@@ -910,8 +911,10 @@ class PhysicsManager : public std::enable_shared_from_this<PhysicsManager> {
     return (existingArticulatedObjects_.count(physObjectID) > 0);
   }
 
-  //============= Object Rigid Constraint API =============
+  PhysicsKeyframe saveKeyframe();
+  void restoreFromKeyframe(const PhysicsKeyframe& keyframe);
 
+  //============= Object Rigid Constraint API =============
   /**
    * @brief Create a rigid constraint between two objects or an object and the
    * world.

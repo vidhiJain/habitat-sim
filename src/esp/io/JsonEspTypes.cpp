@@ -101,5 +101,56 @@ bool fromJsonValue(const JsonGenericValue& obj,
   return true;
 }
 
+JsonGenericValue toJsonValue(const esp::physics::RigidObjectKeyframe& x,
+                             JsonAllocator& allocator) {
+  JsonGenericValue obj(rapidjson::kObjectType);
+  addMember(obj, "name", x.name, allocator);
+  addMember(obj, "translation", x.translation, allocator);
+  addMember(obj, "rotation", x.rotation, allocator);
+  return obj;
+}
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::RigidObjectKeyframe& x) {
+  readMember(obj, "name", x.name);
+  readMember(obj, "translation", x.translation);
+  readMember(obj, "rotation", x.rotation);
+  return true;
+}
+
+JsonGenericValue toJsonValue(const esp::physics::ArticulatedObjectKeyframe& x,
+                             JsonAllocator& allocator) {
+  JsonGenericValue obj(rapidjson::kObjectType);
+  addMember(obj, "name", x.name, allocator);
+  addMember(obj, "translation", x.translation, allocator);
+  addMember(obj, "rotation", x.rotation, allocator);
+  addMember(obj, "jointPositions", x.jointPositions, allocator);
+  return obj;
+}
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::ArticulatedObjectKeyframe& x) {
+  readMember(obj, "name", x.name);
+  readMember(obj, "translation", x.translation);
+  readMember(obj, "rotation", x.rotation);
+  readMember(obj, "jointPositions", x.jointPositions);
+  return true;
+}
+
+JsonGenericValue toJsonValue(const esp::physics::PhysicsKeyframe& x,
+                             JsonAllocator& allocator) {
+  JsonGenericValue obj(rapidjson::kObjectType);
+  addMember(obj, "rigidObjects", x.rigidObjects, allocator);
+  addMember(obj, "articulatedObjects", x.articulatedObjects, allocator);
+  return obj;
+}
+
+bool fromJsonValue(const JsonGenericValue& obj,
+                   esp::physics::PhysicsKeyframe& x) {
+  readMember(obj, "rigidObjects", x.rigidObjects);
+  readMember(obj, "articulatedObjects", x.articulatedObjects);
+  return true;
+}
+
 }  // namespace io
 }  // namespace esp

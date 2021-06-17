@@ -602,5 +602,70 @@ void PhysicsManager::setVoxelizationDraw(const std::string& gridName,
     }
   }
 }
+
+PhysicsKeyframe PhysicsManager::saveKeyframe() {
+  PhysicsKeyframe keyframe;
+
+  for (auto& it : existingArticulatedObjects_) {
+    const auto& artObj = it.second;
+    ArticulatedObjectKeyframe keyframeArtObj;
+    keyframeArtObj.name = artObj->getObjectName();
+    keyframeArtObj.translation = artObj->getTranslation();
+    keyframeArtObj.rotation = artObj->getRotation();
+    keyframeArtObj.jointPositions = artObj->getJointPositions();
+    // todo: avoid array copies
+    keyframe.articulatedObjects.push_back(std::move(keyframeArtObj));
+  }
+
+  for (auto& it : existingObjects_) {
+    const auto& rigidObj = it.second;
+    RigidObjectKeyframe keyframeRigidObj;
+    keyframeRigidObj.name = rigidObj->getObjectName();
+    keyframeRigidObj.translation = rigidObj->getTranslation();
+    keyframeRigidObj.rotation = rigidObj->getRotation();
+    keyframe.rigidObjects.push_back(std::move(keyframeRigidObj));
+  }
+
+  return keyframe;
+}
+
+void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
+  if (existingArticulatedObjects_.size() !=
+      keyframe.articulatedObjects.size()) {
+    LOG(ERROR)
+        << "PhysicsManager::restoreFromKeyframe: articulatedObjects mismatch";
+    return;
+  }
+
+  if (existingObjects_.size() != keyframe.rigidObjects.size()) {
+    LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: rigidObjects mismatch";
+    return;
+  }
+
+  int i = 0;
+  for (auto& it : existingArticulatedObjects_) {
+    auto& artObj = it.second;
+    const auto& keyframeArtObj = keyframe.articulatedObjects[i++];
+    // todo: check name? look up by name?
+    artObj->setTranslation(keyframeArtObj.translation);
+    artObj->setRotation(keyframeArtObj.rotation);
+    artObj->setJointPositions(keyframeArtObj.jointPositions);
+    // artObj->setActive(true);
+    // todo: set zero vel and force?
+  }
+
+  i = 0;
+  for (auto& it : existingObjects_) {
+    auto& rigidObj = it.second;
+    const auto& keyframeRigidObj = keyframe.rigidObjects[i++];
+    rigidObj->setTranslation(keyframeRigidObj.translation);
+    rigidObj->setRotation(keyframeRigidObj.rotation);
+    if (rigidObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
+      rigidObj->setActive(true);
+    }
+    // todo: set zero vel?
+  }
+}
+
 }  // namespace physics
 }  // namespace esp

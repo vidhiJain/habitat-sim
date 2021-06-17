@@ -1363,6 +1363,15 @@ class Simulator {
    */
   void setShadowMapsToDrawables();
 
+  esp::physics::PhysicsKeyframe savePhysicsKeyframe() {
+    return physicsManager_->saveKeyframe();
+  }
+
+  void restoreFromPhysicsKeyframe(
+      const esp::physics::PhysicsKeyframe& keyframe) {
+    physicsManager_->restoreFromKeyframe(keyframe);
+  }
+
  protected:
   Simulator() = default;
   /**
