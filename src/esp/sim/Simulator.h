@@ -1230,6 +1230,15 @@ class Simulator {
       bool saveChdToObj = false);
 #endif
 
+  esp::physics::PhysicsKeyframe savePhysicsKeyframe() {
+    return physicsManager_->saveKeyframe();
+  }
+
+  void restoreFromPhysicsKeyframe(
+      const esp::physics::PhysicsKeyframe& keyframe) {
+    physicsManager_->restoreFromKeyframe(keyframe);
+  }
+
  protected:
   Simulator() = default;
   /**
