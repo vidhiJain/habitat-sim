@@ -88,6 +88,70 @@ std::string getCurrentTimeString() {
 using namespace Mn::Math::Literals;
 using Magnum::Math::Literals::operator""_degf;
 
+
+
+class ObjectDropper {
+public:
+  ObjectDropper(esp::sim::Simulator* simulator, esp::gfx::RenderCamera* renderCamera)
+    : simulator_(simulator)
+    , renderCamera_(renderCamera)
+    {
+    }
+
+  void update(const Magnum::Vector2i& cursor, bool isPrimaryButton, bool isSecondaryButton) {
+
+    auto ray = renderCamera_->unproject(cursor);
+    esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
+
+    int mouseoverRigidObjId = -1;
+    if (raycastResults.hasHits()) {
+    
+      mouseoverRigidObjId = raycastResults.hits[0].objectId;
+    }
+
+    if (mouseoverRigidObjId != -1) {
+
+
+    }
+  }
+
+private:
+
+#if 0
+  void mapHitObjectIdToArtObject(esp::sim::Simulator* simulator,
+                                int objectId,
+                                int& hitArticulatedObjectId,
+                                int& hitArticulatedLinkIndex) {
+    CORRADE_INTERNAL_ASSERT(objectId != esp::ID_UNDEFINED);
+
+    bool hitArticulatedObject = false;
+    // TODO: determine if this is true (link id?)
+    hitArticulatedObjectId = esp::ID_UNDEFINED;
+    hitArticulatedLinkIndex = esp::ID_UNDEFINED;
+    // TODO: get this info from link?
+    for (auto aoId : simulator->getExistingArticulatedObjectIDs()) {
+      if (aoId == objectId) {
+        // grabbed the base link
+        hitArticulatedObject = true;
+        hitArticulatedObjectId = aoId;
+      } else if (simulator->getObjectIdsToLinkIds(aoId).count(objectId) > 0) {
+        hitArticulatedObject = true;
+        hitArticulatedObjectId = aoId;
+        hitArticulatedLinkIndex =
+            simulator->getObjectIdsToLinkIds(aoId).at(objectId);
+      }
+    }
+  }
+#endif
+
+  esp::sim::Simulator* simulator_ = nullptr;
+  esp::gfx::RenderCamera* renderCamera_ = nullptr;
+};
+
+
+
+
+
 class Viewer : public Mn::Platform::Application {
  public:
   explicit Viewer(const Arguments& arguments);
@@ -175,6 +239,8 @@ class Viewer : public Mn::Platform::Application {
   void screenshot();
 
   void createSimulator();
+  void savePhysicsKeyframe();
+  void restoreFromPhysicsKeyframe();
 
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
@@ -513,6 +579,7 @@ void Viewer::createSimulator() {
   auto& args = args_;
 
   if (simulator_) {
+    simulator_->close();
     simulator_->reconfigure(simConfig_);
   } else {
     simulator_ = esp::sim::Simulator::create_unique(simConfig_);
@@ -590,6 +657,22 @@ void Viewer::createSimulator() {
   defaultAgent_ = simulator_->getAgent(defaultAgentId_);
   agentBodyNode_ = &defaultAgent_->node();
   renderCamera_ = getAgentCamera().getRenderCamera();
+
+  // temp hard-coded add URDF models (soon, we can include them in the scene instance file)
+  const std::vector<std::string> filepaths = {
+    "data/scene_datasets/lighthouse_kitchen/urdf/dishwasher_urdf/ktc_dishwasher.urdf",
+    "data/scene_datasets/lighthouse_kitchen/urdf/kitchen_oven/kitchen_oven.urdf"
+  };
+
+  for (const auto& filepath : filepaths) {
+    const bool fixedBase = true;
+    const auto& artObjMgr = simulator_->getArticulatedObjectManager();
+    const auto artObj = artObjMgr->addBulletArticulatedObjectFromURDF(filepath, fixedBase, 1.f, 1.f, true);
+    artObj->setMotionType(esp::physics::MotionType::KINEMATIC);
+    // note: positioning will be done via restoreFromPhysicsKeyframe
+  }
+
+  restoreFromPhysicsKeyframe();
 }
 
 Viewer::Viewer(const Arguments& arguments)
@@ -683,6 +766,7 @@ Viewer::Viewer(const Arguments& arguments)
   if (args.isSet("stage-requires-lighting")) {
     Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
     simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
+    simConfig.overrideSceneLightDefaults = true;
   }
 
   // setup the PhysicsManager config file
@@ -1510,9 +1594,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
         recorder->writeSavedKeyframesToFile(gfxReplayRecordFilepath_);
       }
 #endif
-      Mn::Debug{} << "Re-creating Simulator...";
-      createSimulator();
+      savePhysicsKeyframe();
     } break;
+    case KeyEvent::Key::T: {
+      restoreFromPhysicsKeyframe();
+    } break;
+    
     case KeyEvent::Key::Esc:
       /* Using Application::exit(), which exits at the next iteration of the
          event loop (same as the window close button would do). Using
@@ -1643,9 +1730,11 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       // query the agent state
       showAgentStateMsg(true, true);
       break;
+#if 0
     case KeyEvent::Key::T:
       torqueLastObject();
       break;
+#endif
     case KeyEvent::Key::U:
       removeLastObject();
       break;
@@ -1697,6 +1786,48 @@ void Viewer::screenshot() {
       Mn::GL::defaultFramebuffer,
       screenshot_directory + std::to_string(savedFrames++) + ".png");
 }  // Viewer::screenshot
+
+
+
+
+
+
+
+void Viewer::savePhysicsKeyframe() {
+
+  const auto filepath = "./my_physics_keyframe.json";
+
+  auto keyframe = simulator_->savePhysicsKeyframe();
+
+  rapidjson::Document d(rapidjson::kObjectType);
+  rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+  esp::io::addMember(d, "keyframe", keyframe, allocator);
+  esp::io::writeJsonToFile(d, filepath);
+
+}
+
+void Viewer::restoreFromPhysicsKeyframe() {
+
+  const auto filepath = "./my_physics_keyframe.json";
+
+  if (!Corrade::Utility::Directory::exists(filepath)) {
+    LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: file " << filepath
+               << " not found.";
+    return;
+  }
+  try {
+    auto newDoc = esp::io::parseJsonFile(filepath);
+    esp::physics::PhysicsKeyframe keyframe;
+    esp::io::readMember(newDoc, "keyframe", keyframe);
+    simulator_->restoreFromPhysicsKeyframe(keyframe);
+  } catch (...) {
+    LOG(ERROR)
+        << "Viewer::restoreFromPhysicsKeyframe: failed to parse keyframes from "
+        << filepath << ".";
+  }
+
+}
+
 
 }  // namespace
 
