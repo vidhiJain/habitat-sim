@@ -638,5 +638,40 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
   }
 }
 
+void PhysicsManager::resolvePhysicsHitID(int hitId,
+                                         bool* isStage,
+                                         int* rigidObjId,
+                                         int* artObjId,
+                                         int* linkId) {
+  *isStage = false;
+  *rigidObjId = esp::ID_UNDEFINED;
+  *artObjId = esp::ID_UNDEFINED;
+  *linkId = esp::ID_UNDEFINED;
+
+  if (hitId == -1) {
+    *isStage = true;
+    return;
+  }
+
+  for (auto& it : existingArticulatedObjects_) {
+    auto aoId = it.first;
+    if (aoId == hitId) {
+      // grabbed the base link
+      *artObjId = aoId;
+      return;
+    } else {
+      const auto& objectIdToLinkId = it.second->objectIdToLinkId_;
+      if (objectIdToLinkId.count(hitId) > 0) {
+        *artObjId = aoId;
+        *linkId = objectIdToLinkId.at(hitId);
+        return;
+      }
+    }
+  }
+
+  CORRADE_INTERNAL_ASSERT(this->existingObjects_.count(hitId));
+  *rigidObjId = hitId;
+}
+
 }  // namespace physics
 }  // namespace esp

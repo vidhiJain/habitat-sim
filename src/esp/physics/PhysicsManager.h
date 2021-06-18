@@ -409,6 +409,12 @@ class PhysicsManager : public std::enable_shared_from_this<PhysicsManager> {
     return v;
   }
 
+  void resolvePhysicsHitID(int hitId,
+                           bool* isStage,
+                           int* rigidObjId,
+                           int* artObjId,
+                           int* linkId);
+
   //============= ArticulatedObject functions =============
 
   /**
