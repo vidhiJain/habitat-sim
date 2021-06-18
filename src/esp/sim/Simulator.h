@@ -284,6 +284,18 @@ class Simulator {
     return std::vector<int>();  // empty if no simulator exists
   }
 
+  void resolvePhysicsHitID(int hitId,
+                           bool* isStage,
+                           int* rigidObjId,
+                           int* artObjId,
+                           int* linkId,
+                           int sceneID = 0) {
+    if (sceneHasPhysics(sceneID)) {
+      return physicsManager_->resolvePhysicsHitID(hitId, isStage, rigidObjId,
+                                                  artObjId, linkId);
+    }
+  }
+
   /**
    * @brief Get the @ref esp::physics::MotionType of an object.
    * See @ref esp::physics::PhysicsManager::getExistingObjectIDs.
