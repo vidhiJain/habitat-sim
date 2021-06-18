@@ -509,6 +509,11 @@ class PhysicsManager : public std::enable_shared_from_this<PhysicsManager> {
     return *existingArticulatedObjects_.at(objectId).get();
   }
 
+  void resolvePhysicsHitID(int hitId,
+                           bool* isStage,
+                           int* rigidObjId,
+                           int* artObjId,
+                           int* linkId);
   //============ Simulator functions =============
 
   /** @brief Step the physical world forward in time. Time may only advance in
