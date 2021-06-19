@@ -136,6 +136,7 @@ endif()
 if(BUILD_GUI_VIEWERS)
   message("Building GUI viewer")
   add_subdirectory(utils/viewer)
+  add_subdirectory(utils/arrange_recorder)
 endif()
 
 if(BUILD_BASIS_COMPRESSOR)
