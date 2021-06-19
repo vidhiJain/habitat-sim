@@ -8,11 +8,11 @@ Coming soon: a session is recorded to disk as a sequence of moves, where each mo
 
 ## Building and Running
 
-1. Note that Arrange Recorder is not currently organized as its own executable. For now, it is implemented inside the Habitat viewer.
-1. Starting by building the Habitat viewer [from source](https://github.com/facebookresearch/habitat-sim/blob/master/BUILD_FROM_SOURCE.md) (do *not* install via Conda or Docker). You should build with the following flags: `build.sh --bullet`
-2. Download these 3D assets and extract into the existing `examples/cpp_apps/arrange_recorder/data` folder: todo: link
-3. Set your working directory: `cd examples/cpp_apps/arrange_recorder/`.
-4. `chmod +x arrange_recorder.sh` and run `arrange_recorder.sh`.
+Note: Arrange Recorder is not currently organized as its own executable. For now, it is implemented inside the Habitat viewer.
+1. Start by building the Habitat viewer [from source](https://github.com/facebookresearch/habitat-sim/blob/master/BUILD_FROM_SOURCE.md) (do *not* install via Conda or Docker). You should build with the following flags: `build.sh --bullet`
+1. Set your working directory: `cd examples/cpp_apps/arrange_recorder/`
+1. Download [data_v1.zip](https://drive.google.com/file/d/1SE7TnLVSIemwREHbvQ8M1a5kWamANWMU/view?usp=sharing) and extract into the existing `arrange_recorder/data` folder: `unzip data_v1.zip -d data`
+1. `chmod +x arrange_recorder.sh` and run `arrange_recorder.sh`
 
 ## Mouse and Keyboard Controls
 
@@ -29,8 +29,8 @@ While holding an object:
 
 Movement and camera controls:
 - Right-click and drag to look around. You can also look around with the arrow keys.
-- Use Z and X to adjust your height up and down.
-- Use WASD to move around.
+- Use `Z` and `X` to adjust your height up and down.
+- Use `WASD` to move around.
 
 ## Customizing the Scene Setup
 
