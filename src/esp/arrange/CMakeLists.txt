@@ -1,9 +1,9 @@
 add_library(
-  arrange_recorder STATIC
+  arrange STATIC
   Arranger.cpp Arranger.h
 )
 
 target_link_libraries(
-  arrange_recorder
+  arrange
   PUBLIC core glog gfx
 )
