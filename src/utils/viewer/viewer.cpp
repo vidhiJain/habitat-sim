@@ -25,6 +25,7 @@
 #include <Magnum/Shaders/Shaders.h>
 #include <Magnum/Timeline.h>
 #include "esp/core/configure.h"
+#include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/gfx/replay/Recorder.h"
@@ -88,69 +89,307 @@ std::string getCurrentTimeString() {
 using namespace Mn::Math::Literals;
 using Magnum::Math::Literals::operator""_degf;
 
-
-
-class ObjectDropper {
-public:
-  ObjectDropper(esp::sim::Simulator* simulator, esp::gfx::RenderCamera* renderCamera)
-    : simulator_(simulator)
-    , renderCamera_(renderCamera)
-    {
-    }
-
-  void update(const Magnum::Vector2i& cursor, bool isPrimaryButton, bool isSecondaryButton) {
-
-    auto ray = renderCamera_->unproject(cursor);
-    esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
-
-    int mouseoverRigidObjId = -1;
-    if (raycastResults.hasHits()) {
-    
-      mouseoverRigidObjId = raycastResults.hits[0].objectId;
-    }
-
-    if (mouseoverRigidObjId != -1) {
-
-
-    }
+class Arranger {
+ public:
+  Arranger(esp::sim::Simulator* simulator,
+           esp::gfx::RenderCamera* renderCamera,
+           esp::gfx::DebugRender* debugRender)
+      : simulator_(simulator),
+        renderCamera_(renderCamera),
+        debugRender_(debugRender) {
+    existingObjectIds_ = simulator_->getExistingObjectIDs();
   }
 
-private:
+  void setCursor(const Magnum::Vector2i& cursor) { cursor_ = cursor; }
 
-#if 0
-  void mapHitObjectIdToArtObject(esp::sim::Simulator* simulator,
-                                int objectId,
-                                int& hitArticulatedObjectId,
-                                int& hitArticulatedLinkIndex) {
-    CORRADE_INTERNAL_ASSERT(objectId != esp::ID_UNDEFINED);
+  void update(float dt, bool isPrimaryButton, bool isSecondaryButton) {
+    if (linkAnimOpt_) {
+      auto& linkAnim = *linkAnimOpt_;
 
-    bool hitArticulatedObject = false;
-    // TODO: determine if this is true (link id?)
-    hitArticulatedObjectId = esp::ID_UNDEFINED;
-    hitArticulatedLinkIndex = esp::ID_UNDEFINED;
-    // TODO: get this info from link?
-    for (auto aoId : simulator->getExistingArticulatedObjectIDs()) {
-      if (aoId == objectId) {
-        // grabbed the base link
-        hitArticulatedObject = true;
-        hitArticulatedObjectId = aoId;
-      } else if (simulator->getObjectIdsToLinkIds(aoId).count(objectId) > 0) {
-        hitArticulatedObject = true;
-        hitArticulatedObjectId = aoId;
-        hitArticulatedLinkIndex =
-            simulator->getObjectIdsToLinkIds(aoId).at(objectId);
+      linkAnim.animTimer += dt;
+
+      auto artObj = simulator_->getArticulatedObjectManager()->getObjectByID(
+          linkAnim.artObjId);
+      artObj->setActive(true);
+      auto jointPositions = artObj->getJointPositions();
+      float jointPos = jointPositions[linkAnim.jointPosOffset];
+
+      // float animFraction = smoothstep(linkAnim.animTimer /
+      // linkAnim.animDuration); float newPos =
+      // Mn::Math::lerp(linkAnim.startPos, linkAnim.endPos, animFraction);
+
+      // animation progress is based on position progress towards endPos
+      // note animDuration not used right now
+      float animFraction =
+          calcLerpFraction(linkAnim.startPos, linkAnim.endPos, jointPos);
+      float forceDir = linkAnim.endPos < linkAnim.startPos ? -1.f : 1.f;
+      static float eps = 0.01;
+      bool isNearEndPos = std::abs(jointPos - linkAnim.endPos) < eps;
+
+#if 0  // force approach
+      // force starts out strong and decreases over time
+      float animForceMagScale = 1.f - animFraction;
+
+      // jointPositions[linkAnim.jointPosOffset] = newPos;
+      // artObj->setJointPositions(jointPositions);
+      auto jointForces = artObj->getJointForces();
+
+      static float maxAccel = 5.f;
+      const float linkMass = 2.f; // temp hack because this is broken: artObj->getLink(linkAnim.linkId)->getMass();
+      float force = forceDir * animForceMagScale * maxAccel * linkMass;
+      jointForces[linkAnim.jointPosOffset] = force;
+      artObj->setJointForces(jointForces);
+#endif
+
+      static float startVel = 0.1f;
+      static float maxVel = 0.75f;
+      static float endVel = 0.1f;
+      static float exp0 = 0.25;  // smaller => faster accel at start of anim
+      static float exp1 = 5.f;   // larger => faster completion of anim
+      float velMag =
+          (animFraction < 0.5)
+              ? Mn::Math::lerp(startVel, maxVel,
+                               Mn::Math::pow(smoothstep(calcLerpFraction(
+                                                 0.f, 0.5, animFraction)),
+                                             exp0))
+              : Mn::Math::lerp(maxVel, endVel,
+                               Mn::Math::pow(smoothstep(calcLerpFraction(
+                                                 0.5f, 1.0, animFraction)),
+                                             exp1));
+      // snap to zero vel if near end pos (anim is finished)
+      float vel = isNearEndPos ? 0.0f : forceDir * velMag;
+
+      auto jointVels = artObj->getJointVelocities();
+      jointVels[linkAnim.jointPosOffset] = vel;
+      artObj->setJointVelocities(jointVels);
+
+      static float animMaxDuration = 9.f;  // todo: tunable
+      if (isNearEndPos || linkAnim.animTimer > animMaxDuration) {
+        if (isNearEndPos) {
+          // animation is finished so snap to end pos
+          auto jointPositions = artObj->getJointPositions();
+          jointPositions[linkAnim.jointPosOffset] = linkAnim.endPos;
+          artObj->setJointPositions(jointPositions);
+        }
+
+        linkAnimOpt_ = Cr::Containers::NullOpt;
+      }
+      return;
+    }
+
+    if (heldObjId_ == -1) {
+      auto ray = renderCamera_->unproject(cursor_);
+      static float sphereRadius = 0.02f;
+      esp::physics::RaycastResults raycastResults =
+          simulator_->castSphere(ray, sphereRadius);
+
+      int mouseoverRigidObjId = -1;
+      if (raycastResults.hasHits()) {
+        auto hitId = raycastResults.hits[0].objectId;
+
+        bool isStage;
+        int rigidObjId;
+        int artObjId;
+        int linkId;
+        simulator_->resolvePhysicsHitID(hitId, &isStage, &rigidObjId, &artObjId,
+                                        &linkId);
+
+        if (rigidObjId != -1) {
+          if (simulator_->getObjectMotionType(rigidObjId) ==
+              esp::physics::MotionType::DYNAMIC) {
+            mouseoverRigidObjId = rigidObjId;
+          }
+        } else if (artObjId != -1 && linkId != -1) {
+          auto artObj =
+              simulator_->getArticulatedObjectManager()->getObjectByID(
+                  artObjId);
+
+          const auto* link = artObj->getLink(linkId);
+
+          // beware getDisplayRadiusForNode(&link->getSceneNode()) doesn't work
+          // because getCumulativeBB is broken for links
+          debugRender_->drawCircle(link->getTranslation(), Mn::Vector3(0, 1, 0),
+                                   0.3f, 16, Mn::Color4(1.f, 0.5, 0.f, 1.f));
+
+          if (isPrimaryButton) {
+            int numJointPos = artObj->getLinkNumJointPos(linkId);
+            if (numJointPos == 1) {
+              int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
+              const auto lowerLimits = artObj->getJointPositionLimits();
+              const auto upperLimits =
+                  artObj->getJointPositionLimits(/*upperLimits*/ true);
+              if (lowerLimits[jointPosOffset] != INFINITY) {
+                float jointPos = artObj->getJointPositions()[jointPosOffset];
+                float upperLimit = upperLimits[jointPosOffset];
+                float lowerLimit = lowerLimits[jointPosOffset];
+                float animEndPos;
+                if (std::abs(jointPos - upperLimit) <
+                    std::abs(jointPos - lowerLimit)) {
+                  // closer to upperLimit
+                  animEndPos = lowerLimit;
+                } else {
+                  // closer to lowerLimit
+                  animEndPos = upperLimit;
+                }
+
+                static float animDuration = 2.f;  // todo: tunable
+                linkAnimOpt_ = LinkAnimation{.artObjId = artObjId,
+                                             .linkId = linkId,
+                                             .jointPosOffset = jointPosOffset,
+                                             .startPos = jointPos,
+                                             .endPos = animEndPos,
+                                             .animTimer = 0.f,
+                                             .animDuration = animDuration};
+              }
+            }
+          }
+        }
+      }
+
+      if (mouseoverRigidObjId != -1) {
+        debugRender_->drawCircle(
+            simulator_->getTranslation(mouseoverRigidObjId),
+            Mn::Vector3(0, 1, 0),
+            getDisplayRadiusForObject(mouseoverRigidObjId) * 1.5, 16,
+            Mn::Color4::red());
+
+        if (isPrimaryButton) {
+          heldObjId_ = mouseoverRigidObjId;
+          auto heldObj =
+              simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+          heldObj->setMotionType(esp::physics::MotionType::KINEMATIC);
+          heldObj->overrideCollisionGroup(
+              esp::physics::CollisionGroup::Default);
+          heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
+        }
+      }
+    } else {
+      auto heldObj =
+          simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+
+      if (isSecondaryButton) {
+        recentHeldObjRotIndex_ =
+            (recentHeldObjRotIndex_ + 1) % getNumRotationIndices();
+        heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
+      }
+
+      // hide held object. move out of sight. This is for visuals, but also to
+      // avoid screwing up the sphere-cast we're about to do.
+      const Mn::Vector3 hiddenPos(0.f, -100.f, 0.f);
+      heldObj->setTranslation(hiddenPos);
+
+      auto ray = renderCamera_->unproject(cursor_);
+      // use sphere cast instead of raycast so that we can easily hit narrow
+      // objects like the dishwasher rack
+      static float sphereRadius = 0.02f;
+      esp::physics::RaycastResults raycastResults =
+          simulator_->castSphere(ray, sphereRadius);
+
+      bool foundPreviewPos = false;
+      if (raycastResults.hasHits()) {
+        Mn::Vector3 hitPos = raycastResults.hits[0].point;
+        Mn::Vector3 queryPos = hitPos;
+
+        static float maxOffsetY = 0.5f;
+        static float offsetStep = 0.02f;
+        for (float offsetY = 0; offsetY < maxOffsetY; offsetY += offsetStep) {
+          heldObj->setTranslation(queryPos);
+          if (!simulator_->contactTest(heldObjId_)) {
+            foundPreviewPos = true;
+            break;
+          }
+          queryPos.y() += offsetStep;
+        }
+
+        if (foundPreviewPos) {
+          debugRender_->drawCircle(queryPos, Mn::Vector3(0, 1, 0),
+                                   getDisplayRadiusForObject(heldObjId_) * 1.5,
+                                   16, Mn::Color4::green());
+        }
+
+        auto color = foundPreviewPos ? Mn::Color4::green() : Mn::Color4::red();
+        static float lineLen = 1.f;
+        debugRender_->drawLine(hitPos + Mn::Vector3(lineLen, 0.f, 0.f),
+                               hitPos - Mn::Vector3(lineLen, 0.f, 0.f), color);
+        debugRender_->drawLine(hitPos + Mn::Vector3(0.f, 0.f, lineLen),
+                               hitPos - Mn::Vector3(0.f, 0.f, lineLen), color);
+        debugRender_->drawLine(hitPos, hitPos - Mn::Vector3(0.f, lineLen, 0.f),
+                               color);
+        if (foundPreviewPos) {
+          debugRender_->drawLine(hitPos, queryPos, color);
+        }
+      }
+
+      if (foundPreviewPos && isPrimaryButton) {
+        heldObj->setMotionType(esp::physics::MotionType::DYNAMIC);
+        heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
+        heldObjId_ = -1;
+      }
+
+      if (!foundPreviewPos) {
+        // hide held object. move out of sight. This is for visuals, but also to
+        // not screw up the raycast we're about to do.
+        const Mn::Vector3 hiddenPos(0.f, -100.f, 0.f);
+        heldObj->setTranslation(hiddenPos);
       }
     }
   }
-#endif
+
+ private:
+  float calcLerpFraction(float src0, float src1, float x) {
+    CORRADE_INTERNAL_ASSERT(src1 != src0);
+    return (x - src0) / (src1 - src0);
+  }
+
+  float smoothstep(float fraction) {
+    float x = esp::geo::clamp(fraction, 0.0f, 1.0f);
+    // Evaluate polynomial
+    return x * x * (3 - 2 * x);
+  }
+
+  struct LinkAnimation {
+    int artObjId = -1;
+    int linkId = -1;
+    int jointPosOffset = -1;
+    float startPos = -1.f;
+    float endPos = -1.f;
+    float animTimer = 0.f;
+    float animDuration = -1.f;
+  };
+
+  int getNumRotationIndices() { return 6; }
+
+  Mn::Quaternion getRotationByIndex(int index) {
+    static Mn::Quaternion rots[] = {
+        Mn::Quaternion(Mn::Math::IdentityInit),
+        Mn::Quaternion::rotation(Mn::Deg(90.f), Mn::Vector3(1.f, 0.f, 0.f)),
+        Mn::Quaternion::rotation(Mn::Deg(90.f), Mn::Vector3(0.f, 0.f, 1.f)),
+        Mn::Quaternion::rotation(Mn::Deg(90.f), Mn::Vector3(-1.f, 0.f, 0.f)),
+        Mn::Quaternion::rotation(Mn::Deg(90.f), Mn::Vector3(0.f, 0.f, -1.f)),
+        Mn::Quaternion::rotation(Mn::Deg(180.f), Mn::Vector3(1.f, 0.f, 0.f))};
+    return rots[index];
+  }
+
+  float getDisplayRadiusForObject(int objId) {
+    return getDisplayRadiusForNode(simulator_->getObjectSceneNode(objId));
+  }
+
+  float getDisplayRadiusForNode(const esp::scene::SceneNode* node) {
+    const auto range = node->getCumulativeBB();
+    static float fudgeScale = 0.3f;
+    const float radius = (range.max() - range.min()).length() * fudgeScale;
+    return radius;
+  }
 
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
+  esp::gfx::DebugRender* debugRender_ = nullptr;
+  Magnum::Vector2i cursor_;
+  std::vector<int> existingObjectIds_;
+  int heldObjId_ = -1;
+  int recentHeldObjRotIndex_ = 0;
+  Corrade::Containers::Optional<LinkAnimation> linkAnimOpt_;
 };
-
-
-
-
 
 class Viewer : public Mn::Platform::Application {
  public:
@@ -316,6 +555,7 @@ Key Commands:
   // single inline for logging agent state msgs, so can be easily modified
   inline void showAgentStateMsg(bool showPos, bool showOrient) {
     std::stringstream strDat("");
+#if 1
     if (showPos) {
       strDat << "Agent position "
              << Eigen::Map<esp::vec3f>(agentBodyNode_->translation().data())
@@ -325,6 +565,13 @@ Key Commands:
       strDat << "Agent orientation "
              << esp::quatf(agentBodyNode_->rotation()).coeffs().transpose();
     }
+#endif
+
+    strDat << "Camera position "
+           << Eigen::Map<esp::vec3f>(renderCamera_->node().translation().data())
+           << " ";
+    strDat << "Camera orientation "
+           << esp::quatf(renderCamera_->node().rotation()).coeffs().transpose();
 
     auto str = strDat.str();
     if (str.size() > 0) {
@@ -443,7 +690,7 @@ Key Commands:
   Mn::Timeline timeline_;
 
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
-  bool showFPS_ = true;
+  bool showFPS_ = false;
 
   enum class VisualizeMode : uint8_t {
     RGBA = 0,
@@ -462,6 +709,9 @@ Key Commands:
     VisualSensorModeCount,
   };
   VisualSensorMode sensorMode_ = VisualSensorMode::Camera;
+
+  esp::gfx::DebugRender debugRender_;
+  std::unique_ptr<Arranger> arranger_;
 
   void bindRenderTarget();
 };
@@ -658,28 +908,44 @@ void Viewer::createSimulator() {
   agentBodyNode_ = &defaultAgent_->node();
   renderCamera_ = getAgentCamera().getRenderCamera();
 
-  // temp hard-coded add URDF models (soon, we can include them in the scene instance file)
+  // temp hard-coded add URDF models (soon, we can include them in the scene
+  // instance file)
   const std::vector<std::string> filepaths = {
-    "data/scene_datasets/lighthouse_kitchen/urdf/dishwasher_urdf/ktc_dishwasher.urdf",
-    "data/scene_datasets/lighthouse_kitchen/urdf/kitchen_oven/kitchen_oven.urdf"
-  };
+      "data/lighthouse_kitchen_dataset/urdf/dishwasher_urdf/"
+      "ktc_dishwasher.urdf",
+      "data/lighthouse_kitchen_dataset/urdf/kitchen_oven/kitchen_oven.urdf"};
 
   for (const auto& filepath : filepaths) {
     const bool fixedBase = true;
     const auto& artObjMgr = simulator_->getArticulatedObjectManager();
-    const auto artObj = artObjMgr->addBulletArticulatedObjectFromURDF(filepath, fixedBase, 1.f, 1.f, true);
-    artObj->setMotionType(esp::physics::MotionType::KINEMATIC);
+    const auto artObj = artObjMgr->addBulletArticulatedObjectFromURDF(
+        filepath, fixedBase, 1.f, 1.f, true);
+    // artObj->setMotionType(esp::physics::MotionType::KINEMATIC);
     // note: positioning will be done via restoreFromPhysicsKeyframe
   }
 
+  // temp place agent and camera for dishwasher loading
+  agentBodyNode_->setTranslation(Mn::Vector3(-0.045473, 0, -0.418929));
+
+  auto agentRot = Mn::Quaternion({0, -0.256289, 0}, 0.9666);
+
+  agentBodyNode_->setRotation(agentRot);
+  renderCamera_->node().setTranslation(Mn::Vector3(0, 0.316604, 0.610451));
+  renderCamera_->node().setRotation(
+      Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
+
+  arranger_ = std::make_unique<Arranger>(simulator_.get(), renderCamera_,
+                                         &debugRender_);
   restoreFromPhysicsKeyframe();
 }
 
 Viewer::Viewer(const Arguments& arguments)
     : Mn::Platform::Application{
           arguments,
-          Configuration{}.setTitle("Viewer").setWindowFlags(
-              Configuration::WindowFlag::Resizable),
+          Configuration{}
+              .setTitle("Viewer")
+              .setSize(Mn::Vector2i(1280, 720))
+              .setWindowFlags(Configuration::WindowFlag::Resizable),
           GLConfiguration{}
               .setColorBufferSize(Mn::Vector4i(8, 8, 8, 8))
               .setSampleCount(4)} {
@@ -1243,6 +1509,8 @@ void Viewer::drawEvent() {
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
   }
 
+  arranger_->update(timeline_.previousFrameDuration(), false, false);
+
   uint32_t visibles = renderCamera_->getPreviousNumVisibleDrawables();
 
   if (visualizeMode_ == VisualizeMode::Depth ||
@@ -1302,6 +1570,13 @@ void Viewer::drawEvent() {
       Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
       Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
       Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
+
+      {
+        Mn::Matrix4 camM(renderCamera_->cameraMatrix());
+        Mn::Matrix4 projM(renderCamera_->projectionMatrix());
+        debugRender_.setTransformationProjectionMatrix(projM * camM);
+        debugRender_.flushLines();
+      }
 
       visibles = renderCamera_->getPreviousNumVisibleDrawables();
       esp::gfx::RenderTarget* sensorRenderTarget =
@@ -1495,45 +1770,10 @@ void Viewer::viewportEvent(ViewportEvent& event) {
 }
 
 void Viewer::mousePressEvent(MouseEvent& event) {
-  // add primitive w/ right click if a collision object is hit by a raycast
-  if (event.button() == MouseEvent::Button::Right) {
-    if (simulator_->getPhysicsSimulationLibrary() !=
-        esp::physics::PhysicsManager::PhysicsSimulationLibrary::NoPhysics) {
-      auto viewportPoint = event.position();
-      auto ray = renderCamera_->unproject(viewportPoint);
-      esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
-
-      if (raycastResults.hasHits()) {
-        // If VHACD is enabled, and Ctrl + Right Click is used, voxelized the
-        // object clicked on.
-#ifdef ESP_BUILD_WITH_VHACD
-        if (event.modifiers() & MouseEvent::Modifier::Ctrl) {
-          auto objID = raycastResults.hits[0].objectId;
-          displayVoxelField(objID);
-          return;
-        }
-#endif
-        addPrimitiveObject();
-        auto existingObjectIDs = simulator_->getExistingObjectIDs();
-        // use the bounding box to create a safety margin for adding the
-        // object
-        float boundingBuffer =
-            simulator_->getObjectSceneNode(existingObjectIDs.back())
-                    ->computeCumulativeBB()
-                    .size()
-                    .max() /
-                2.0 +
-            0.04;
-        simulator_->setTranslation(
-            raycastResults.hits[0].point +
-                raycastResults.hits[0].normal * boundingBuffer,
-            existingObjectIDs.back());
-
-        simulator_->setRotation(esp::core::randomRotation(),
-                                existingObjectIDs.back());
-      }
-    }
-  }  // end add primitive w/ right click
+  if (event.button() == MouseEvent::Button::Left) {
+    arranger_->setCursor(event.position());
+    arranger_->update(0.f, true, false);
+  }
 
   event.setAccepted();
   redraw();
@@ -1563,19 +1803,19 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
 }  // Viewer::mouseScrollEvent
 
 void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
-  if (!(event.buttons() & MouseMoveEvent::Button::Left)) {
-    return;
-  }
+  arranger_->setCursor(event.position());
 
-  const Mn::Vector2i delta = event.relativePosition();
-  auto& controls = *defaultAgent_->getControls().get();
-  controls(*agentBodyNode_, "turnRight", delta.x());
-  // apply the transformation to all sensors
-  for (auto& p : agentBodyNode_->getSubtreeSensors()) {
-    controls(p.second.get().object(),  // SceneNode
-             "lookDown",               // action name
-             delta.y(),                // amount
-             false);                   // applyFilter
+  if ((event.buttons() & MouseMoveEvent::Button::Right)) {
+    const Mn::Vector2i delta = event.relativePosition();
+    auto& controls = *defaultAgent_->getControls().get();
+    controls(*agentBodyNode_, "turnRight", delta.x());
+    // apply the transformation to all sensors
+    for (auto& p : agentBodyNode_->getSubtreeSensors()) {
+      controls(p.second.get().object(),  // SceneNode
+               "lookDown",               // action name
+               delta.y(),                // amount
+               false);                   // applyFilter
+    }
   }
 
   redraw();
@@ -1599,7 +1839,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::T: {
       restoreFromPhysicsKeyframe();
     } break;
-    
+    case KeyEvent::Key::F:
+      arranger_->update(0.f, false, true);
+      break;
+
     case KeyEvent::Key::Esc:
       /* Using Application::exit(), which exits at the next iteration of the
          event loop (same as the window close button would do). Using
@@ -1703,9 +1946,11 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       simulator_->setFrustumCullingEnabled(
           !simulator_->isFrustumCullingEnabled());
       break;
+#if 0
     case KeyEvent::Key::F:
       pushLastObject();
       break;
+#endif
     case KeyEvent::Key::H:
       printHelpText();
       break;
@@ -1787,15 +2032,10 @@ void Viewer::screenshot() {
       screenshot_directory + std::to_string(savedFrames++) + ".png");
 }  // Viewer::screenshot
 
-
-
-
-
-
-
 void Viewer::savePhysicsKeyframe() {
-
-  const auto filepath = "./my_physics_keyframe.json";
+  // todo: look up based on name of scene instance
+  const auto filepath =
+      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
 
   auto keyframe = simulator_->savePhysicsKeyframe();
 
@@ -1803,12 +2043,11 @@ void Viewer::savePhysicsKeyframe() {
   rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
   esp::io::addMember(d, "keyframe", keyframe, allocator);
   esp::io::writeJsonToFile(d, filepath);
-
 }
 
 void Viewer::restoreFromPhysicsKeyframe() {
-
-  const auto filepath = "./my_physics_keyframe.json";
+  const auto filepath =
+      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
     LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: file " << filepath
@@ -1825,9 +2064,7 @@ void Viewer::restoreFromPhysicsKeyframe() {
         << "Viewer::restoreFromPhysicsKeyframe: failed to parse keyframes from "
         << filepath << ".";
   }
-
 }
-
 
 }  // namespace
 
