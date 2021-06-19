@@ -7,55 +7,27 @@
 #include <ctime>
 #include <fstream>
 
-#include <Magnum/configure.h>
-#include <Magnum/ImGuiIntegration/Context.hpp>
-#ifdef MAGNUM_TARGET_WEBGL
-#include <Magnum/Platform/EmscriptenApplication.h>
-#else
-#include <Magnum/Platform/GlfwApplication.h>
-#endif
-#include <Magnum/GL/Context.h>
-#include <Magnum/GL/Extensions.h>
+#include <Corrade/Utility/Arguments.h>
+#include <Corrade/Utility/Assert.h>
+#include <Magnum/EigenIntegration/GeometryIntegration.h>
+#include <Magnum/GL/DefaultFramebuffer.h>
 #include <Magnum/GL/Framebuffer.h>
 #include <Magnum/GL/Renderbuffer.h>
-#include <Magnum/GL/RenderbufferFormat.h>
-#include <Magnum/Image.h>
-#include <Magnum/PixelFormat.h>
+#include <Magnum/GL/Renderer.h>
+#include <Magnum/Platform/GlfwApplication.h>
 #include <Magnum/SceneGraph/Camera.h>
-#include <Magnum/Shaders/Shaders.h>
 #include <Magnum/Timeline.h>
+#include <Magnum/ImGuiIntegration/Context.hpp>
+
 #include "esp/arrange/Arranger.h"
 #include "esp/core/configure.h"
+#include "esp/core/esp.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
-#include "esp/gfx/replay/Recorder.h"
-#include "esp/gfx/replay/ReplayManager.h"
-#include "esp/nav/PathFinder.h"
-#include "esp/scene/ObjectControls.h"
-#include "esp/scene/SceneNode.h"
-
-#include <Corrade/Utility/Arguments.h>
-#include <Corrade/Utility/Assert.h>
-#include <Corrade/Utility/Debug.h>
-#include <Corrade/Utility/DebugStl.h>
-#include <Corrade/Utility/Directory.h>
-#include <Corrade/Utility/FormatStl.h>
-#include <Corrade/Utility/String.h>
-#include <Magnum/DebugTools/Screenshot.h>
-#include <Magnum/EigenIntegration/GeometryIntegration.h>
-#include <Magnum/GL/DefaultFramebuffer.h>
-#include <Magnum/GL/Renderer.h>
-#include <sophus/so3.hpp>
-#include "esp/core/Utility.h"
-#include "esp/core/esp.h"
-#include "esp/gfx/Drawable.h"
-#include "esp/io/io.h"
-
 #include "esp/physics/configure.h"
+#include "esp/scene/SceneNode.h"
 #include "esp/sensor/CameraSensor.h"
-#include "esp/sensor/EquirectangularSensor.h"
-#include "esp/sensor/FisheyeSensor.h"
 #include "esp/sim/Simulator.h"
 
 constexpr float moveSensitivity = 0.07f;
@@ -69,12 +41,9 @@ namespace Mn = Magnum;
 
 namespace {
 
-using namespace Mn::Math::Literals;
-using Magnum::Math::Literals::operator""_degf;
-
-class Viewer : public Mn::Platform::Application {
+class ArrangeRecorder : public Mn::Platform::Application {
  public:
-  explicit Viewer(const Arguments& arguments);
+  explicit ArrangeRecorder(const Arguments& arguments);
 
  private:
   // Keys for moving/looking are recorded according to whether they are
@@ -107,20 +76,15 @@ class Viewer : public Mn::Platform::Application {
   }
 
   // single inline for logging agent state msgs, so can be easily modified
-  inline void showAgentStateMsg(bool showPos, bool showOrient) {
+  inline void showAgentStateMsg() {
     std::stringstream strDat("");
-#if 1
-    if (showPos) {
-      strDat << "Agent position "
-             << Eigen::Map<esp::vec3f>(agentBodyNode_->translation().data())
-             << " ";
-    }
-    if (showOrient) {
-      strDat << "Agent orientation "
-             << esp::quatf(agentBodyNode_->rotation()).coeffs().transpose();
-    }
-#endif
 
+    strDat << "Agent position "
+           << Eigen::Map<esp::vec3f>(agentBodyNode_->translation().data())
+           << " ";
+    strDat << "Agent orientation "
+           << esp::quatf(agentBodyNode_->rotation()).coeffs().transpose()
+           << " ";
     strDat << "Camera position "
            << Eigen::Map<esp::vec3f>(renderCamera_->node().translation().data())
            << " ";
@@ -173,7 +137,6 @@ class Viewer : public Mn::Platform::Application {
   void bindRenderTarget();
 };
 
-// todo: simplify this code
 void addSensors(esp::agent::AgentConfiguration& agentConfig,
                 const Cr::Utility::Arguments& args) {
   const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
@@ -198,92 +161,9 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
     spec->orientation = {0, 0, 0};
     spec->resolution = esp::vec2i(viewportSize[1], viewportSize[0]);
   };
-  // add the camera color sensor
-  // for historical reasons, we call it "rgba_camera"
-  addCameraSensor("rgba_camera", esp::sensor::SensorType::Color);
-  // add the camera depth sensor
-  addCameraSensor("depth_camera", esp::sensor::SensorType::Depth);
-  // add the camera semantic sensor
-  addCameraSensor("semantic_camera", esp::sensor::SensorType::Semantic);
-
-  auto addFisheyeSensor = [&](const std::string& uuid,
-                              esp::sensor::SensorType sensorType,
-                              esp::sensor::FisheyeSensorModelType modelType) {
-    // TODO: support the other model types in the future.
-    CORRADE_INTERNAL_ASSERT(modelType ==
-                            esp::sensor::FisheyeSensorModelType::DoubleSphere);
-    agentConfig.sensorSpecifications.emplace_back(
-        esp::sensor::FisheyeSensorDoubleSphereSpec::create());
-    auto spec = static_cast<esp::sensor::FisheyeSensorDoubleSphereSpec*>(
-        agentConfig.sensorSpecifications.back().get());
-
-    spec->uuid = uuid;
-    spec->sensorType = sensorType;
-    if (sensorType == esp::sensor::SensorType::Depth ||
-        sensorType == esp::sensor::SensorType::Semantic) {
-      spec->channels = 1;
-    }
-    spec->sensorSubType = esp::sensor::SensorSubType::Fisheye;
-    spec->fisheyeModelType = modelType;
-    spec->resolution = esp::vec2i(viewportSize[1], viewportSize[0]);
-    // default viewport size: 1600 x 1200
-    spec->principalPointOffset =
-        Mn::Vector2(viewportSize[0] / 2, viewportSize[1] / 2);
-    if (modelType == esp::sensor::FisheyeSensorModelType::DoubleSphere) {
-      // in this demo, we choose "GoPro":
-      spec->focalLength = {364.84f, 364.86f};
-      spec->xi = -0.27;
-      spec->alpha = 0.57;
-      // Certainly you can try your own lenses.
-      // For your convenience, there are some other lenses, e.g., BF2M2020S23,
-      // BM2820, BF5M13720, BM4018S118, whose parameters can be found at:
-      //   Vladyslav Usenko, Nikolaus Demmel and Daniel Cremers: The Double
-      //   Sphere Camera Model, The International Conference on 3D Vision(3DV),
-      //   2018
-
-      // BF2M2020S23
-      // spec->focalLength = Mn::Vector2(313.21, 313.21);
-      // spec->xi = -0.18;
-      // spec->alpha = 0.59;
-    }
-  };
-  // add the fisheye sensor
-  addFisheyeSensor("rgba_fisheye", esp::sensor::SensorType::Color,
-                   esp::sensor::FisheyeSensorModelType::DoubleSphere);
-  // add the fisheye depth sensor
-  addFisheyeSensor("depth_fisheye", esp::sensor::SensorType::Depth,
-                   esp::sensor::FisheyeSensorModelType::DoubleSphere);
-  // add the fisheye semantic sensor
-  addFisheyeSensor("semantic_fisheye", esp::sensor::SensorType::Semantic,
-                   esp::sensor::FisheyeSensorModelType::DoubleSphere);
-
-  auto addEquirectangularSensor = [&](const std::string& uuid,
-                                      esp::sensor::SensorType sensorType) {
-    agentConfig.sensorSpecifications.emplace_back(
-        esp::sensor::EquirectangularSensorSpec::create());
-    auto spec = static_cast<esp::sensor::EquirectangularSensorSpec*>(
-        agentConfig.sensorSpecifications.back().get());
-    spec->uuid = uuid;
-    spec->sensorType = sensorType;
-    if (sensorType == esp::sensor::SensorType::Depth ||
-        sensorType == esp::sensor::SensorType::Semantic) {
-      spec->channels = 1;
-    }
-    spec->sensorSubType = esp::sensor::SensorSubType::Equirectangular;
-    spec->resolution = esp::vec2i(viewportSize[1], viewportSize[0]);
-  };
-  // add the equirectangular sensor
-  addEquirectangularSensor("rgba_equirectangular",
-                           esp::sensor::SensorType::Color);
-  // add the equirectangular depth sensor
-  addEquirectangularSensor("depth_equirectangular",
-                           esp::sensor::SensorType::Depth);
-  // add the equirectangular semantic sensor
-  addEquirectangularSensor("semantic_equirectangular",
-                           esp::sensor::SensorType::Semantic);
 }
 
-void Viewer::createSimulator() {
+void ArrangeRecorder::createSimulator() {
   auto& args = args_;
 
   if (simulator_) {
@@ -303,16 +183,6 @@ void Viewer::createSimulator() {
   if (args.isSet("disable-navmesh")) {
     if (simulator_->getPathFinder()->isLoaded()) {
       simulator_->setPathFinder(esp::nav::PathFinder::create());
-    }
-  } else if (args.isSet("recompute-navmesh")) {
-    esp::nav::NavMeshSettings navMeshSettings;
-    simulator_->recomputeNavMesh(*simulator_->getPathFinder().get(),
-                                 navMeshSettings, true);
-  } else if (!args.value("navmesh-file").empty()) {
-    std::string navmeshFile = Cr::Utility::Directory::join(
-        Corrade::Utility::Directory::current(), args.value("navmesh-file"));
-    if (Cr::Utility::Directory::exists(navmeshFile)) {
-      simulator_->getPathFinder()->loadNavMesh(navmeshFile);
     }
   }
 
@@ -398,11 +268,11 @@ void Viewer::createSimulator() {
 }
 
 // todo: remove all these args
-Viewer::Viewer(const Arguments& arguments)
+ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
     : Mn::Platform::Application{
           arguments,
           Configuration{}
-              .setTitle("Viewer")
+              .setTitle("ArrangeRecorder")
               .setSize(Mn::Vector2i(1280, 720))
               .setWindowFlags(Configuration::WindowFlag::Resizable),
           GLConfiguration{}
@@ -416,7 +286,7 @@ Viewer::Viewer(const Arguments& arguments)
 #endif
       .setHelp("scene", "scene/stage file to load")
       .addSkippedPrefix("magnum", "engine-specific options")
-      .setGlobalHelp("Displays a 3D scene file provided on command line")
+      .setGlobalHelp("Rearrange a scene with the mouse")
       .addOption("dataset", "default")
       .setHelp("dataset", "dataset configuration file to use")
       .addBooleanOption("enable-physics")
@@ -425,30 +295,12 @@ Viewer::Viewer(const Arguments& arguments)
                "Stage asset should be lit with Phong shading.")
       .addBooleanOption("debug-bullet")
       .setHelp("debug-bullet", "Render Bullet physics debug wireframes.")
-      .addOption("gfx-replay-record-filepath")
-      .setHelp("gfx-replay-record-filepath",
-               "Enable replay recording with R key.")
-      .addOption("physics-config", ESP_DEFAULT_PHYSICS_CONFIG_REL_PATH)
-      .setHelp("physics-config",
-               "Provide a non-default PhysicsManager config file.")
-      .addOption("object-dir", "data/objects/example_objects")
-      .setHelp("object-dir",
-               "Provide a directory to search for object config files "
-               "(relative to habitat-sim directory).")
       .addBooleanOption("orthographic")
       .setHelp("orthographic",
                "If specified, use orthographic camera to view scene.")
       .addBooleanOption("disable-navmesh")
       .setHelp("disable-navmesh",
                "Disable the navmesh, disabling agent navigation constraints.")
-      .addOption("navmesh-file")
-      .setHelp("navmesh-file", "Manual override path to scene navmesh file.")
-      .addBooleanOption("recompute-navmesh")
-      .setHelp("recompute-navmesh",
-               "Programmatically re-generate the scene navmesh.")
-      .addOption("agent-transform-filepath")
-      .setHelp("agent-transform-filepath",
-               "Specify path to load camera transform from.")
       .parse(arguments.argc, arguments.argv);
 
   const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
@@ -491,24 +343,16 @@ Viewer::Viewer(const Arguments& arguments)
     simConfig.overrideSceneLightDefaults = true;
   }
 
-  // setup the PhysicsManager config file
-  std::string physicsConfig = Cr::Utility::Directory::join(
-      Corrade::Utility::Directory::current(), args.value("physics-config"));
-  if (Cr::Utility::Directory::exists(physicsConfig)) {
-    Mn::Debug{} << "Using PhysicsManager config: " << physicsConfig;
-    simConfig.physicsConfigFile = physicsConfig;
-  }
-
   simConfig_ = simConfig;
   args_ = std::move(args);
   createSimulator();
 
   timeline_.start();
 
-}  // end Viewer::Viewer
+}  // end ArrangeRecorder::ArrangeRecorder
 
 float timeSinceLastSimulation = 0.0;
-void Viewer::drawEvent() {
+void ArrangeRecorder::drawEvent() {
   // Wrap profiler measurements around all methods to render images from
   // RenderCamera
   Mn::GL::defaultFramebuffer.clear(Mn::GL::FramebufferClear::Color |
@@ -526,10 +370,6 @@ void Viewer::drawEvent() {
       // In the interest of frame rate, only a single step is taken,
       // even if timeSinceLastSimulation is quite large
       simulator_->stepWorld(1.0 / 60.0);
-      const auto recorder = simulator_->getGfxReplayManager()->getRecorder();
-      if (recorder) {
-        recorder->saveKeyframe();
-      }
     }
     // reset timeSinceLastSimulation, accounting for potential overflow
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
@@ -571,9 +411,10 @@ void Viewer::drawEvent() {
 
     esp::gfx::RenderTarget* sensorRenderTarget =
         simulator_->getRenderTarget(defaultAgentId_, "rgba_camera");
-    CORRADE_ASSERT(sensorRenderTarget,
-                   "Error in Viewer::drawEvent: sensor's rendering target "
-                   "cannot be nullptr.", );
+    CORRADE_ASSERT(
+        sensorRenderTarget,
+        "Error in ArrangeRecorder::drawEvent: sensor's rendering target "
+        "cannot be nullptr.", );
 
     sensorRenderTarget->blitRgbaToDefault();
   }
@@ -619,7 +460,7 @@ void Viewer::drawEvent() {
   redraw();
 }
 
-void Viewer::moveAndLook(int repetitions) {
+void ArrangeRecorder::moveAndLook(int repetitions) {
   for (int i = 0; i < repetitions; i++) {
     if (keysPressed[KeyEvent::Key::Left]) {
       defaultAgent_->act("turnLeft");
@@ -662,7 +503,7 @@ void Viewer::moveAndLook(int repetitions) {
   }
 }
 
-void Viewer::bindRenderTarget() {
+void ArrangeRecorder::bindRenderTarget() {
   for (auto& it : agentBodyNode_->getSubtreeSensors()) {
     if (it.second.get().isVisualSensor()) {
       esp::sensor::VisualSensor& visualSensor =
@@ -673,7 +514,7 @@ void Viewer::bindRenderTarget() {
 }
 
 // todo: test or cut this
-void Viewer::viewportEvent(ViewportEvent& event) {
+void ArrangeRecorder::viewportEvent(ViewportEvent& event) {
   for (auto& it : agentBodyNode_->getSubtreeSensors()) {
     if (it.second.get().isVisualSensor()) {
       esp::sensor::VisualSensor& visualSensor =
@@ -681,21 +522,6 @@ void Viewer::viewportEvent(ViewportEvent& event) {
       visualSensor.setResolution(event.framebufferSize()[1],
                                  event.framebufferSize()[0]);
       renderCamera_->setViewport(visualSensor.framebufferSize());
-      // before, here we will bind the render target, but now we defer it
-      if (visualSensor.specification()->sensorSubType ==
-          esp::sensor::SensorSubType::Fisheye) {
-        auto spec = static_cast<esp::sensor::FisheyeSensorDoubleSphereSpec*>(
-            visualSensor.specification().get());
-
-        // const auto viewportSize =
-        // Mn::GL::defaultFramebuffer.viewport().size();
-        const auto viewportSize = event.framebufferSize();
-        int size = viewportSize[0] < viewportSize[1] ? viewportSize[0]
-                                                     : viewportSize[1];
-        // since the sensor is determined, sensor's focal length is fixed.
-        spec->principalPointOffset =
-            Mn::Vector2(viewportSize[0] / 2, viewportSize[1] / 2);
-      }
     }
   }
   bindRenderTarget();
@@ -705,7 +531,7 @@ void Viewer::viewportEvent(ViewportEvent& event) {
                   event.windowSize(), event.framebufferSize());
 }
 
-void Viewer::mousePressEvent(MouseEvent& event) {
+void ArrangeRecorder::mousePressEvent(MouseEvent& event) {
   if (event.button() == MouseEvent::Button::Left) {
     arranger_->setCursor(event.position());
     arranger_->update(0.f, true, false);
@@ -715,11 +541,11 @@ void Viewer::mousePressEvent(MouseEvent& event) {
   redraw();
 }
 
-void Viewer::mouseReleaseEvent(MouseEvent& event) {
+void ArrangeRecorder::mouseReleaseEvent(MouseEvent& event) {
   event.setAccepted();
 }
 
-void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
+void ArrangeRecorder::mouseScrollEvent(MouseScrollEvent& event) {
   // shift+scroll is forced into x direction on mac, seemingly at OS level, so
   // use both x and y offsets.
   float scrollModVal = abs(event.offset().y()) > abs(event.offset().x())
@@ -736,9 +562,9 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
   redraw();
 
   event.setAccepted();
-}  // Viewer::mouseScrollEvent
+}  // ArrangeRecorder::mouseScrollEvent
 
-void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
+void ArrangeRecorder::mouseMoveEvent(MouseMoveEvent& event) {
   arranger_->setCursor(event.position());
 
   if ((event.buttons() & MouseMoveEvent::Button::Right)) {
@@ -759,7 +585,7 @@ void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
   event.setAccepted();
 }
 
-void Viewer::keyPressEvent(KeyEvent& event) {
+void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
   const auto key = event.key();
   switch (key) {
     case KeyEvent::Key::R: {
@@ -779,15 +605,14 @@ void Viewer::keyPressEvent(KeyEvent& event) {
          crashes at exit. We don't want that. */
       exit(0);
     case KeyEvent::Key::Q:
-      // query the agent state
-      showAgentStateMsg(true, true);
+      showAgentStateMsg();
       break;
   }
 }
 
-void Viewer::keyReleaseEvent(KeyEvent& event) {}
+void ArrangeRecorder::keyReleaseEvent(KeyEvent& event) {}
 
-void Viewer::savePhysicsKeyframe() {
+void ArrangeRecorder::savePhysicsKeyframe() {
   // todo: look up based on name of scene instance
   const auto filepath =
       "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
@@ -800,13 +625,13 @@ void Viewer::savePhysicsKeyframe() {
   esp::io::writeJsonToFile(d, filepath);
 }
 
-void Viewer::restoreFromPhysicsKeyframe() {
+void ArrangeRecorder::restoreFromPhysicsKeyframe() {
   const auto filepath =
       "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: file " << filepath
-               << " not found.";
+    LOG(ERROR) << "ArrangeRecorder::restoreFromPhysicsKeyframe: file "
+               << filepath << " not found.";
     return;
   }
   try {
@@ -815,12 +640,13 @@ void Viewer::restoreFromPhysicsKeyframe() {
     esp::io::readMember(newDoc, "keyframe", keyframe);
     simulator_->restoreFromPhysicsKeyframe(keyframe);
   } catch (...) {
-    LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: failed to parse "
-                  "keyframes from "
-               << filepath << ".";
+    LOG(ERROR)
+        << "ArrangeRecorder::restoreFromPhysicsKeyframe: failed to parse "
+           "keyframes from "
+        << filepath << ".";
   }
 }
 
 }  // namespace
 
-MAGNUM_APPLICATION_MAIN(Viewer)
+MAGNUM_APPLICATION_MAIN(ArrangeRecorder)
