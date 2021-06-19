@@ -24,7 +24,7 @@
 #include <Magnum/SceneGraph/Camera.h>
 #include <Magnum/Shaders/Shaders.h>
 #include <Magnum/Timeline.h>
-#include "esp/arrange_recorder/Arranger.h"
+#include "esp/arrange/Arranger.h"
 #include "esp/core/configure.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
@@ -57,8 +57,6 @@
 #include "esp/sensor/EquirectangularSensor.h"
 #include "esp/sensor/FisheyeSensor.h"
 #include "esp/sim/Simulator.h"
-
-#include "ObjectPickingHelper.h"
 
 constexpr float moveSensitivity = 0.07f;
 constexpr float lookSensitivity = 0.9f;
@@ -523,12 +521,11 @@ void Viewer::drawEvent() {
 
   // occasionally a frame will pass quicker than 1/60 seconds
   if (timeSinceLastSimulation >= 1.0 / 60.0) {
-    if (simulating_ || simulateSingleStep_) {
+    if (true) {
       // step physics at a fixed rate
       // In the interest of frame rate, only a single step is taken,
       // even if timeSinceLastSimulation is quite large
       simulator_->stepWorld(1.0 / 60.0);
-      simulateSingleStep_ = false;
       const auto recorder = simulator_->getGfxReplayManager()->getRecorder();
       if (recorder) {
         recorder->saveKeyframe();
@@ -540,7 +537,6 @@ void Viewer::drawEvent() {
 
   arranger_->update(timeline_.previousFrameDuration(), false, false);
 
-  CORRADE_INTERNAL_ASSERT(sensorMode_ == VisualSensorMode::Camera);
   {
     // ============= regular RGB with object picking =================
     // using polygon offset to increase mesh depth to avoid z-fighting with
@@ -671,13 +667,7 @@ void Viewer::bindRenderTarget() {
     if (it.second.get().isVisualSensor()) {
       esp::sensor::VisualSensor& visualSensor =
           static_cast<esp::sensor::VisualSensor&>(it.second.get());
-      if (visualizeMode_ == VisualizeMode::Depth ||
-          visualizeMode_ == VisualizeMode::Semantic) {
-        simulator_->getRenderer()->bindRenderTarget(
-            visualSensor, {esp::gfx::Renderer::Flag::VisualizeTexture});
-      } else {
-        simulator_->getRenderer()->bindRenderTarget(visualSensor);
-      }
+      simulator_->getRenderer()->bindRenderTarget(visualSensor);
     }  // if
   }    // for
 }
@@ -793,42 +783,43 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       showAgentStateMsg(true, true);
       break;
   }
+}
 
-  void Viewer::keyReleaseEvent(KeyEvent & event) {}
+void Viewer::keyReleaseEvent(KeyEvent& event) {}
 
-  void Viewer::savePhysicsKeyframe() {
-    // todo: look up based on name of scene instance
-    const auto filepath =
-        "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
+void Viewer::savePhysicsKeyframe() {
+  // todo: look up based on name of scene instance
+  const auto filepath =
+      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
 
-    auto keyframe = simulator_->savePhysicsKeyframe();
+  auto keyframe = simulator_->savePhysicsKeyframe();
 
-    rapidjson::Document d(rapidjson::kObjectType);
-    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
-    esp::io::addMember(d, "keyframe", keyframe, allocator);
-    esp::io::writeJsonToFile(d, filepath);
+  rapidjson::Document d(rapidjson::kObjectType);
+  rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+  esp::io::addMember(d, "keyframe", keyframe, allocator);
+  esp::io::writeJsonToFile(d, filepath);
+}
+
+void Viewer::restoreFromPhysicsKeyframe() {
+  const auto filepath =
+      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
+
+  if (!Corrade::Utility::Directory::exists(filepath)) {
+    LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: file " << filepath
+               << " not found.";
+    return;
   }
-
-  void Viewer::restoreFromPhysicsKeyframe() {
-    const auto filepath =
-        "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
-
-    if (!Corrade::Utility::Directory::exists(filepath)) {
-      LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: file " << filepath
-                 << " not found.";
-      return;
-    }
-    try {
-      auto newDoc = esp::io::parseJsonFile(filepath);
-      esp::physics::PhysicsKeyframe keyframe;
-      esp::io::readMember(newDoc, "keyframe", keyframe);
-      simulator_->restoreFromPhysicsKeyframe(keyframe);
-    } catch (...) {
-      LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: failed to parse "
-                    "keyframes from "
-                 << filepath << ".";
-    }
+  try {
+    auto newDoc = esp::io::parseJsonFile(filepath);
+    esp::physics::PhysicsKeyframe keyframe;
+    esp::io::readMember(newDoc, "keyframe", keyframe);
+    simulator_->restoreFromPhysicsKeyframe(keyframe);
+  } catch (...) {
+    LOG(ERROR) << "Viewer::restoreFromPhysicsKeyframe: failed to parse "
+                  "keyframes from "
+               << filepath << ".";
   }
+}
 
 }  // namespace
 
