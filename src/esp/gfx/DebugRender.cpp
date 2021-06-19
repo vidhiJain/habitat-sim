@@ -55,10 +55,10 @@ void DebugRender::flushLines() {
   } else {
     glDisable(GL_LINE_SMOOTH);
   }
-  static float lineWidth = 4.0;  // see also x below
+  static float lineWidth = 1.5;  // see also x below
   glLineWidth(lineWidth);
 
-  static float x = 0.004;  // see also lineWidth above
+  static float x = 0.0015;  // see also lineWidth above
   static float y = 1.41;
   const std::vector<Mn::Vector3> offsets = {
       Mn::Vector3(x, x, 0),     Mn::Vector3(-x, x, 0),
