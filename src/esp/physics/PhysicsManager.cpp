@@ -600,40 +600,53 @@ PhysicsKeyframe PhysicsManager::saveKeyframe() {
 }
 
 void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
-  if (existingArticulatedObjects_.size() !=
-      keyframe.articulatedObjects.size()) {
-    LOG(ERROR)
-        << "PhysicsManager::restoreFromKeyframe: articulatedObjects mismatch";
+  if (keyframe.articulatedObjects.empty() && keyframe.rigidObjects.empty()) {
+    LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: empty keyframe";
     return;
   }
 
-  if (existingObjects_.size() != keyframe.rigidObjects.size()) {
-    LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: rigidObjects mismatch";
-    return;
-  }
+  for (const auto& keyframeArtObj : keyframe.articulatedObjects) {
+    bool found = false;
+    for (auto& it : existingArticulatedObjects_) {
+      auto& artObj = it.second;
+      if (artObj->getObjectName() != keyframeArtObj.name) {
+        continue;
+      }
 
-  int i = 0;
-  for (auto& it : existingArticulatedObjects_) {
-    auto& artObj = it.second;
-    const auto& keyframeArtObj = keyframe.articulatedObjects[i++];
-    // todo: check name? look up by name?
-    artObj->setTranslation(keyframeArtObj.translation);
-    artObj->setRotation(keyframeArtObj.rotation);
-    artObj->setJointPositions(keyframeArtObj.jointPositions);
-    // artObj->setActive(true);
-    // todo: set zero vel and force?
-  }
-
-  i = 0;
-  for (auto& it : existingObjects_) {
-    auto& rigidObj = it.second;
-    const auto& keyframeRigidObj = keyframe.rigidObjects[i++];
-    rigidObj->setTranslation(keyframeRigidObj.translation);
-    rigidObj->setRotation(keyframeRigidObj.rotation);
-    if (rigidObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
-      rigidObj->setActive(true);
+      found = true;
+      artObj->setTranslation(keyframeArtObj.translation);
+      artObj->setRotation(keyframeArtObj.rotation);
+      artObj->setJointPositions(keyframeArtObj.jointPositions);
+      // todo: set zero vel and force? setActive(true)?
     }
-    // todo: set zero vel?
+    if (!found) {
+      LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no art obj in "
+                      "scene with name "
+                   << keyframeArtObj.name;
+    }
+  }
+
+  for (const auto& keyframeRigidObj : keyframe.rigidObjects) {
+    bool found = false;
+    for (auto& it : existingObjects_) {
+      auto& rigidObj = it.second;
+      if (rigidObj->getObjectName() != keyframeRigidObj.name) {
+        continue;
+      }
+
+      found = true;
+      rigidObj->setTranslation(keyframeRigidObj.translation);
+      rigidObj->setRotation(keyframeRigidObj.rotation);
+      if (rigidObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
+        rigidObj->setActive(true);
+      }
+      // todo: set zero vel?
+    }
+    if (!found) {
+      LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no rigid obj in "
+                      "scene with name "
+                   << keyframeRigidObj.name;
+    }
   }
 }
 
