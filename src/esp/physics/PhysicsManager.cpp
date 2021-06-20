@@ -628,13 +628,14 @@ PhysicsKeyframe PhysicsManager::saveKeyframe() {
 
   return keyframe;
 }
-
+// todo: move out of PhysicsManager and implement in terms of object managers
 void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
   if (keyframe.articulatedObjects.empty() && keyframe.rigidObjects.empty()) {
     LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: empty keyframe";
     return;
   }
 
+  std::vector<float> zeros;
   for (const auto& keyframeArtObj : keyframe.articulatedObjects) {
     bool found = false;
     for (auto& it : existingArticulatedObjects_) {
@@ -648,6 +649,16 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
       artObj->setRotation(keyframeArtObj.rotation);
       artObj->setJointPositions(keyframeArtObj.jointPositions);
       // todo: set zero vel and force? setActive(true)?
+
+      if (artObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
+        zeros.resize(keyframeArtObj.jointPositions.size(), 0.f);
+        artObj->setJointVelocities(zeros);
+        artObj->setJointForces(zeros);
+        artObj->setRootLinearVelocity(Mn::Vector3(Mn::Math::ZeroInit));
+        artObj->setRootAngularVelocity(Mn::Vector3(Mn::Math::ZeroInit));
+        artObj->setActive(false);
+      }
+      break;
     }
     if (!found) {
       LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no art obj in "
@@ -667,10 +678,13 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
       found = true;
       rigidObj->setTranslation(keyframeRigidObj.translation);
       rigidObj->setRotation(keyframeRigidObj.rotation);
+
       if (rigidObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
-        rigidObj->setActive(true);
+        rigidObj->setLinearVelocity(Mn::Vector3(Mn::Math::ZeroInit));
+        rigidObj->setAngularVelocity(Mn::Vector3(Mn::Math::ZeroInit));
+        rigidObj->setActive(false);
       }
-      // todo: set zero vel?
+      break;
     }
     if (!found) {
       LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no rigid obj in "
