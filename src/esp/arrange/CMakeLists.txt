@@ -1,6 +1,6 @@
 add_library(
   arrange STATIC
-  Arranger.cpp Arranger.h
+  Arranger.cpp Arranger.h Session.cpp Session.h
 )
 
 target_link_libraries(
