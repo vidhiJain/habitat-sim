@@ -34,8 +34,18 @@ class Arranger {
   };
 
   int getNumRotationIndices();
-
   Mn::Quaternion getRotationByIndex(int index);
+  void updatePhysicsWorld(float dt);
+  void updateForLinkAnimation(float dt,
+                              bool isPrimaryButton,
+                              bool isSecondaryButton);
+  void updateIdle(float dt, bool isPrimaryButton, bool isSecondaryButton);
+  void updateForHeldObject(float dt,
+                           bool isPrimaryButton,
+                           bool isSecondaryButton);
+  void updateWaitingForSceneRest(float dt,
+                                 bool isPrimaryButton,
+                                 bool isSecondaryButton);
 
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
@@ -45,6 +55,8 @@ class Arranger {
   int heldObjId_ = -1;
   int recentHeldObjRotIndex_ = 0;
   Corrade::Containers::Optional<LinkAnimation> linkAnimOpt_;
+  float timeSinceLastSimulation_ = 0.f;
+  bool waitingForSceneRest_ = false;
 };
 
 }  // namespace arrange_recorder
