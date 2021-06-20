@@ -24,6 +24,8 @@ set(
   CubeMapCamera.h
   CubeMap.cpp
   CubeMap.h
+  Debug3DText.cpp
+  Debug3DText.h
   DebugRender.cpp
   DebugRender.h
   Renderer.cpp
@@ -124,6 +126,7 @@ target_link_libraries(
          MagnumPlugins::StbImageConverter
          MagnumPlugins::TinyGltfImporter
          MagnumIntegration::Eigen
+         MagnumIntegration::ImGui
          Corrade::Utility
          Magnum::AnyImageConverter
 )
