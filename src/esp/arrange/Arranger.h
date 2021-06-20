@@ -2,16 +2,18 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef ESP_ARRANGERECORDER_ARRANGER_H_
-#define ESP_ARRANGERECORDER_ARRANGER_H_
+#ifndef ESP_ARRANGE_ARRANGER_H_
+#define ESP_ARRANGE_ARRANGER_H_
 
 #include "esp/gfx/Debug3DText.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/sim/Simulator.h"
 
+#include "Session.h"
+
 namespace esp {
-namespace arrange_recorder {
+namespace arrange {
 
 class Arranger {
  public:
@@ -23,6 +25,8 @@ class Arranger {
   void setCursor(const Magnum::Vector2i& cursor) { cursor_ = cursor; }
 
   void update(float dt, bool isPrimaryButton, bool isSecondaryButton);
+
+  const Session& getSession() const { return session_; }
 
  private:
   struct LinkAnimation {
@@ -62,9 +66,13 @@ class Arranger {
   float timeSinceLastSimulation_ = 0.f;
   bool waitingForSceneRest_ = true;  // wait for rest on scene load
   std::string userInputStatus_;
+  Session session_;
+  Corrade::Containers::Optional<UserAction> activeUserAction_;
+  float physicsTimestep_ = 0.f;
+  int physicsStepCounter_ = 0;
 };
 
-}  // namespace arrange_recorder
+}  // namespace arrange
 }  // namespace esp
 
 #endif

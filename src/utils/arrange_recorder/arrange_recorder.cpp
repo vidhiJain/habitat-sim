@@ -33,13 +33,23 @@
 constexpr float moveSensitivity = 0.07f;
 constexpr float lookSensitivity = 0.9f;
 constexpr float rgbSensorHeight = 1.5f;
-constexpr float agentActionsPerSecond = 60.0f;
 
 // for ease of access
 namespace Cr = Corrade;
 namespace Mn = Magnum;
 
 namespace {
+
+//! return current time as string in format
+//! "year_month_day_hour-minutes-seconds"
+std::string getCurrentTimeString() {
+  time_t now = time(0);
+  tm* ltm = localtime(&now);
+  return std::to_string(1900 + ltm->tm_year) + "_" +
+         std::to_string(1 + ltm->tm_mon) + "_" + std::to_string(ltm->tm_mday) +
+         "_" + std::to_string(ltm->tm_hour) + "-" +
+         std::to_string(ltm->tm_min) + "-" + std::to_string(ltm->tm_sec);
+}
 
 class ArrangeRecorder : public Mn::Platform::Application {
  public:
@@ -66,8 +76,12 @@ class ArrangeRecorder : public Mn::Platform::Application {
   void moveAndLook(int repetitions);
 
   void createSimulator();
-  void savePhysicsKeyframe();
-  void restoreFromPhysicsKeyframe();
+  void saveScenePhysicsKeyframe();
+  void restoreFromScenePhysicsKeyframe();
+  void checkSaveArrangerSession();
+  std::string getActiveSceneSimplifiedName();
+  std::string findNewSessionSaveFilepath();
+  std::string getActiveScenePhysicsKeyframeFilepath();
 
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
@@ -133,7 +147,9 @@ class ArrangeRecorder : public Mn::Platform::Application {
 
   esp::gfx::DebugRender debugRender_;
   esp::gfx::Debug3DText debug3dText_;
-  std::unique_ptr<esp::arrange_recorder::Arranger> arranger_;
+  std::unique_ptr<esp::arrange::Arranger> arranger_;
+  std::string sessionSaveFilepath_;
+  int numSavedArrangerUserActions_ = 0;
   Mn::Vector2i recentCursorPos_;
 
   void bindRenderTarget();
@@ -267,9 +283,9 @@ void ArrangeRecorder::createSimulator() {
   renderCamera_->node().setRotation(
       Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
 
-  arranger_ = std::make_unique<esp::arrange_recorder::Arranger>(
+  arranger_ = std::make_unique<esp::arrange::Arranger>(
       simulator_.get(), renderCamera_, &debugRender_, &debug3dText_);
-  restoreFromPhysicsKeyframe();
+  restoreFromScenePhysicsKeyframe();
 }
 
 // todo: remove all these args
@@ -284,17 +300,12 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
               .setColorBufferSize(Mn::Vector4i(8, 8, 8, 8))
               .setSampleCount(4)} {
   Cr::Utility::Arguments args;
-#ifdef CORRADE_TARGET_EMSCRIPTEN
-  args.addNamedArgument("scene")
-#else
   args.addArgument("scene")
-#endif
       .setHelp("scene", "scene/stage file to load")
       .addSkippedPrefix("magnum", "engine-specific options")
       .setGlobalHelp("Rearrange a scene with the mouse")
       .addOption("dataset", "default")
       .setHelp("dataset", "dataset configuration file to use")
-      .addBooleanOption("enable-physics")
       .addBooleanOption("stage-requires-lighting")
       .setHelp("stage-requires-lighting",
                "Stage asset should be lit with Phong shading.")
@@ -306,6 +317,11 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
       .addBooleanOption("disable-navmesh")
       .setHelp("disable-navmesh",
                "Disable the navmesh, disabling agent navigation constraints.")
+      .addBooleanOption("edit-scene-physics-keyframe")
+      .setHelp("edit-scene-physics-keyframe",
+               "Instead of recording an arrangement session, use the arranger "
+               "to edit the scene's start state. This modifies "
+               "scenes/sceneName.physics_keyframe.json.")
       .parse(arguments.argc, arguments.argv);
 
   const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
@@ -328,7 +344,7 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
   Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::FaceCulling);
 
   sceneFileName = args.value("scene");
-  bool useBullet = args.isSet("enable-physics");
+  bool useBullet = true;
   if (useBullet && (args.isSet("debug-bullet"))) {
     debugBullet_ = true;
   }
@@ -352,6 +368,9 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
   args_ = std::move(args);
   createSimulator();
 
+  // disable v-sync?
+  // setSwapInterval(0);
+
   timeline_.start();
 
 }  // end ArrangeRecorder::ArrangeRecorder
@@ -365,23 +384,17 @@ void ArrangeRecorder::drawEvent() {
 
   // Agent actions should occur at a fixed rate per second
   timeSinceLastSimulation += timeline_.previousFrameDuration();
-  int numAgentActions = timeSinceLastSimulation * agentActionsPerSecond;
-  moveAndLook(numAgentActions);
 
-  // occasionally a frame will pass quicker than 1/60 seconds
-  if (timeSinceLastSimulation >= 1.0 / 60.0) {
-    if (true) {
-      // step physics at a fixed rate
-      // In the interest of frame rate, only a single step is taken,
-      // even if timeSinceLastSimulation is quite large
-      simulator_->stepWorld(1.0 / 60.0);
-    }
-    // reset timeSinceLastSimulation, accounting for potential overflow
-    timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
+  // call moveAndLook at 60 Hz
+  while (timeSinceLastSimulation >= 1.0 / 60.0) {
+    timeSinceLastSimulation -= 1.0 / 60.0;
+    moveAndLook(1);
   }
 
   arranger_->setCursor(recentCursorPos_);
   arranger_->update(timeline_.previousFrameDuration(), false, false);
+
+  checkSaveArrangerSession();
 
   {
     // ============= regular RGB with object picking =================
@@ -603,14 +616,24 @@ void ArrangeRecorder::mouseMoveEvent(MouseMoveEvent& event) {
 void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
   const auto key = event.key();
   switch (key) {
-    case KeyEvent::Key::R: {
-      savePhysicsKeyframe();
+    case KeyEvent::Key::F5: {
+      restoreFromScenePhysicsKeyframe();
     } break;
-    case KeyEvent::Key::T: {
-      restoreFromPhysicsKeyframe();
+    case KeyEvent::Key::S: {
+      if (event.modifiers() & KeyEvent::Modifier::Ctrl) {
+        if (args_.isSet("edit-scene-physics-keyframe")) {
+          saveScenePhysicsKeyframe();
+        } else {
+          LOG(WARNING) << "Use --edit-scene-physics-keyframe to enable "
+                          "editing/saving the scene physics-keyframe.";
+        }
+      }
     } break;
     case KeyEvent::Key::F:
       arranger_->update(0.f, false, true);
+      break;
+    case KeyEvent::Key::C:
+      showFPS_ = !showFPS_;
       break;
     case KeyEvent::Key::Esc:
       /* Using Application::exit(), which exits at the next iteration of the
@@ -623,29 +646,52 @@ void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
       showAgentStateMsg();
       break;
   }
+
+  // Update map of moving/looking keys which are currently pressed
+  if (event.modifiers() == KeyEvent::Modifiers()) {
+    if (keysPressed.count(key) > 0) {
+      keysPressed[key] = true;
+    }
+  }
 }
 
-void ArrangeRecorder::keyReleaseEvent(KeyEvent& event) {}
+void ArrangeRecorder::keyReleaseEvent(KeyEvent& event) {
+  // Update map of moving/looking keys which are currently pressed
+  const auto key = event.key();
+  if (keysPressed.count(key) > 0) {
+    keysPressed[key] = false;
+  }
+}
 
-void ArrangeRecorder::savePhysicsKeyframe() {
-  // todo: look up based on name of scene instance
-  const auto filepath =
-      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
+std::string ArrangeRecorder::getActiveScenePhysicsKeyframeFilepath() {
+  CORRADE_INTERNAL_ASSERT(!simConfig_.activeSceneName.empty());
+  std::string filepathBase =
+      Cr::Utility::Directory::splitExtension(
+          Cr::Utility::Directory::splitExtension(simConfig_.activeSceneName)
+              .first)
+          .first;
 
+  return filepathBase + ".physics_keyframe.json";
+}
+
+void ArrangeRecorder::saveScenePhysicsKeyframe() {
   auto keyframe = simulator_->savePhysicsKeyframe();
 
+  const auto filepath = getActiveScenePhysicsKeyframeFilepath();
   rapidjson::Document d(rapidjson::kObjectType);
   rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
   esp::io::addMember(d, "keyframe", keyframe, allocator);
-  esp::io::writeJsonToFile(d, filepath);
+  esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ true,
+                           /*maxDecimalPlaces*/ 7);
+
+  LOG(INFO) << "Saved new scene start state at " << filepath;
 }
 
-void ArrangeRecorder::restoreFromPhysicsKeyframe() {
-  const auto filepath =
-      "data/lighthouse_kitchen_dataset/scenes/scene0.physics_keyframe.json";
+void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
+  const auto filepath = getActiveScenePhysicsKeyframeFilepath();
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(ERROR) << "ArrangeRecorder::restoreFromPhysicsKeyframe: file "
+    LOG(ERROR) << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: file "
                << filepath << " not found.";
     return;
   }
@@ -656,9 +702,73 @@ void ArrangeRecorder::restoreFromPhysicsKeyframe() {
     simulator_->restoreFromPhysicsKeyframe(keyframe);
   } catch (...) {
     LOG(ERROR)
-        << "ArrangeRecorder::restoreFromPhysicsKeyframe: failed to parse "
+        << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: failed to parse "
            "keyframes from "
         << filepath << ".";
+  }
+
+  LOG(INFO) << "Reloaded scene start state from " << filepath
+            << " and started new session";
+
+  arranger_.reset();
+  arranger_ = std::make_unique<esp::arrange::Arranger>(
+      simulator_.get(), renderCamera_, &debugRender_, &debug3dText_);
+  numSavedArrangerUserActions_ = 0;
+  sessionSaveFilepath_ = "";
+}
+
+std::string ArrangeRecorder::getActiveSceneSimplifiedName() {
+  auto sceneInstanceAttr =
+      simulator_->getMetadataMediator()->getSceneAttributesByName(
+          simConfig_.activeSceneName);
+  return sceneInstanceAttr ? sceneInstanceAttr->getSimplifiedHandle()
+                           : "noActiveScene";
+}
+
+std::string ArrangeRecorder::findNewSessionSaveFilepath() {
+  if (!Cr::Utility::Directory::exists("data")) {
+    LOG(ERROR) << "Data folder not found in working directory! Session saving "
+                  "is disabled.";
+    return "";
+  }
+
+  const std::string sessionsDir = "data/sessions";
+  if (!Cr::Utility::Directory::exists(sessionsDir)) {
+    Cr::Utility::Directory::mkpath(sessionsDir);
+  }
+
+  std::string sessionName = getActiveSceneSimplifiedName() + "_" +
+                            getCurrentTimeString() + ".session.json";
+  return sessionsDir + "/" + sessionName;
+}
+
+void ArrangeRecorder::checkSaveArrangerSession() {
+  const auto& session = arranger_->getSession();
+
+  if (args_.isSet("edit-scene-physics-keyframe")) {
+    return;
+  }
+
+  const auto& filepath = sessionSaveFilepath_;
+
+  // save at the end of every user action
+  if (session.userActions.size() > numSavedArrangerUserActions_) {
+    if (sessionSaveFilepath_.empty()) {
+      sessionSaveFilepath_ = findNewSessionSaveFilepath();
+      if (sessionSaveFilepath_.empty()) {
+        return;
+      }
+    }
+
+    rapidjson::Document d(rapidjson::kObjectType);
+    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+    esp::io::addMember(d, "session", session, allocator);
+    // avoid pretty writer, to reduce filesize
+    esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ false,
+                             /*maxDecimalPlaces*/ 7);
+    LOG(INFO) << "Session saved to " << filepath;
+
+    numSavedArrangerUserActions_ = session.userActions.size();
   }
 }
 

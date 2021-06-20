@@ -5,9 +5,12 @@
 #include "Arranger.h"
 
 namespace esp {
-namespace arrange_recorder {
+namespace arrange {
 
 namespace {
+
+static const int PHYSICS_SAVE_PERIOD =
+    4;  // save a keyframe every n physics steps (see also physicsTimestep_)
 
 float calcLerpFraction(float src0, float src1, float x) {
   CORRADE_INTERNAL_ASSERT(src1 != src0);
@@ -59,6 +62,30 @@ Arranger::Arranger(esp::sim::Simulator* simulator,
       debugRender_(debugRender),
       debug3dText_(debug3dText) {
   existingObjectIds_ = simulator_->getExistingObjectIDs();
+
+  session_.scene = "placeholder";
+
+  // see data/default.physics_config.json timestep
+  physicsTimestep_ = simulator_->getMetadataMediator()
+                         ->getCurrentPhysicsManagerAttributes()
+                         ->getTimestep();
+
+  // save keyframe 0
+  session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+
+  // restore from current physics keyframe; this will put the physics sim into a
+  // more consistent state, e.g. zero velocities
+  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back());
+  // stepping here allows bodies that want to go to sleep to actually go to
+  // sleep
+  simulator_->stepWorld(-1);
+
+  CORRADE_INTERNAL_ASSERT(!activeUserAction_);
+  activeUserAction_ = UserAction();
+  activeUserAction_->isInitialSettling = true;
+  activeUserAction_->startFrame = session_.keyframes.size() - 1;
+  LOG(INFO) << "Starting initial-settling user action on frame " +
+                   activeUserAction_->startFrame;
 }
 
 void Arranger::updateForLinkAnimation(float dt,
@@ -145,7 +172,7 @@ void Arranger::updateIdle(float dt,
   CORRADE_INTERNAL_ASSERT(heldObjId_ == -1 && !linkAnimOpt_);
 
   auto ray = renderCamera_->unproject(cursor_);
-  static float sphereRadius = 0.02f;
+  static float sphereRadius = 0.01f;
   esp::physics::RaycastResults raycastResults =
       simulator_->castSphere(ray, sphereRadius);
 
@@ -206,6 +233,20 @@ void Arranger::updateIdle(float dt,
                                          .animTimer = 0.f,
                                          .animDuration = animDuration};
             userInputStatus_ = "animating... (F to cancel)";
+
+            // start user action for this articulated obj
+            CORRADE_INTERNAL_ASSERT(!activeUserAction_);
+            activeUserAction_ = UserAction();
+            activeUserAction_->articulatedObj =
+                simulator_->getArticulatedObjectManager()->getObjectHandleByID(
+                    artObjId);
+            activeUserAction_->articulatedLink = linkId;
+            activeUserAction_->startFrame = session_.keyframes.size();
+            LOG(INFO) << "Starting user action " << session_.userActions.size()
+                      << " on frame " << activeUserAction_->startFrame
+                      << " with articulatedObj "
+                      << activeUserAction_->articulatedObj << " link "
+                      << activeUserAction_->articulatedLink;
           }
         }
       }
@@ -225,6 +266,16 @@ void Arranger::updateIdle(float dt,
       heldObj->setMotionType(esp::physics::MotionType::KINEMATIC);
       heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Default);
       heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
+
+      // start user action for this rigid obj
+      CORRADE_INTERNAL_ASSERT(!activeUserAction_);
+      activeUserAction_ = UserAction();
+      activeUserAction_->rigidObj =
+          simulator_->getRigidObjectManager()->getObjectHandleByID(heldObjId_);
+      activeUserAction_->startFrame = session_.keyframes.size();
+      LOG(INFO) << "Starting user action " << session_.userActions.size()
+                << " on frame " << activeUserAction_->startFrame
+                << " with rigidObj " << activeUserAction_->rigidObj;
     }
   }
 }
@@ -248,7 +299,7 @@ void Arranger::updateForHeldObject(float dt,
   auto ray = renderCamera_->unproject(cursor_);
   // use sphere cast instead of raycast so that we can easily hit narrow
   // objects like the dishwasher rack
-  static float sphereRadius = 0.02f;
+  static float sphereRadius = 0.01f;
   esp::physics::RaycastResults raycastResults =
       simulator_->castSphere(ray, sphereRadius);
 
@@ -323,7 +374,20 @@ void Arranger::updateWaitingForSceneRest(float dt,
   }
 
   if (!waitingForSceneRest_) {
-    // todo: do a save/restore to force velocities, etc. to zero
+    // end the active user action
+    CORRADE_INTERNAL_ASSERT(activeUserAction_);
+    activeUserAction_->endFrame = session_.keyframes.size() - 1;
+    LOG(INFO) << "Ending user action " << session_.userActions.size()
+              << " on frame " << activeUserAction_->endFrame;
+    session_.userActions.emplace_back(std::move(*activeUserAction_));
+    activeUserAction_ = Cr::Containers::NullOpt;
+
+    // restore from current physics keyframe; this will put the physics sim into
+    // a more consistent state, e.g. zero velocities
+    simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back());
+    // stepping here allows bodies that want to go to sleep to actually go to
+    // sleep
+    simulator_->stepWorld(-1);
   }
 }
 
@@ -332,19 +396,16 @@ void Arranger::update(float dt, bool isPrimaryButton, bool isSecondaryButton) {
 
   if (linkAnimOpt_) {
     updateForLinkAnimation(dt, isPrimaryButton, isSecondaryButton);
-    doFreezePhysicsTime = false;
   } else if (heldObjId_ != -1) {
     updateForHeldObject(dt, isPrimaryButton, isSecondaryButton);
-    doFreezePhysicsTime = true;
   } else if (waitingForSceneRest_) {
     updateWaitingForSceneRest(dt, isPrimaryButton, isSecondaryButton);
-    doFreezePhysicsTime = false;
   } else {
     updateIdle(dt, isPrimaryButton, isSecondaryButton);
-    doFreezePhysicsTime = true;
   }
 
-  if (!doFreezePhysicsTime) {
+  bool doAdvancePhysicsTime = (linkAnimOpt_ || waitingForSceneRest_);
+  if (doAdvancePhysicsTime) {
     updatePhysicsWorld(dt);
   }
 
@@ -374,15 +435,25 @@ Mn::Quaternion Arranger::getRotationByIndex(int index) {
 void Arranger::updatePhysicsWorld(float dt) {
   timeSinceLastSimulation_ += dt;
 
-  // occasionally a frame will pass quicker than 1/60 seconds
-  if (timeSinceLastSimulation_ >= 1.0 / 60.0) {
+  while (timeSinceLastSimulation_ >= physicsTimestep_) {
     // step physics at a fixed rate
-    // In the interest of frame rate, only a single step is taken,
-    // even if timeSinceLastSimulation_ is quite large
-    simulator_->stepWorld(1.0 / 60.0);
-    // reset timeSinceLastSimulation_, accounting for potential overflow
-    timeSinceLastSimulation_ = fmod(timeSinceLastSimulation_, 1.0 / 60.0);
+    simulator_->stepWorld(-1);
+    timeSinceLastSimulation_ -= physicsTimestep_;
+
+    physicsStepCounter_++;
+    if (physicsStepCounter_ % PHYSICS_SAVE_PERIOD == 0) {
+      session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+    }
   }
+
+#if 0  // debug reference code
+  static float elapsedTime = 0.f;
+  elapsedTime += dt;
+  if (physicsStepCounter_ % 10 == 9) {
+    float stepRate = physicsStepCounter_ / elapsedTime;
+    LOG(INFO) << "stepRate: " << stepRate;
+  }
+#endif
 }
 
 int Arranger::markAndCountActivePhysicsObjects() {
@@ -414,5 +485,5 @@ int Arranger::markAndCountActivePhysicsObjects() {
   return count;
 }
 
-}  // namespace arrange_recorder
+}  // namespace arrange
 }  // namespace esp
