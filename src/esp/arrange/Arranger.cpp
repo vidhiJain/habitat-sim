@@ -202,9 +202,9 @@ void Arranger::updateIdle(float dt,
         int numJointPos = artObj->getLinkNumJointPos(linkId);
         if (numJointPos == 1) {
           int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
-          const auto lowerLimits = artObj->getJointPositionLimits();
-          const auto upperLimits =
-              artObj->getJointPositionLimits(/*upperLimits*/ true);
+          const auto pair = artObj->getJointPositionLimits();
+          const auto& lowerLimits = pair.first;
+          const auto& upperLimits = pair.second;
           if (lowerLimits[jointPosOffset] != INFINITY) {
             float jointPos = artObj->getJointPositions()[jointPosOffset];
             float upperLimit = upperLimits[jointPosOffset];
