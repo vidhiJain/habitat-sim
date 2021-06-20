@@ -105,16 +105,16 @@ JsonGenericValue toJsonValue(const esp::physics::RigidObjectKeyframe& x,
                              JsonAllocator& allocator) {
   JsonGenericValue obj(rapidjson::kObjectType);
   addMember(obj, "name", x.name, allocator);
-  addMember(obj, "translation", x.translation, allocator);
-  addMember(obj, "rotation", x.rotation, allocator);
+  addMember(obj, "pos", x.translation, allocator);
+  addMember(obj, "rot", x.rotation, allocator);
   return obj;
 }
 
 bool fromJsonValue(const JsonGenericValue& obj,
                    esp::physics::RigidObjectKeyframe& x) {
   readMember(obj, "name", x.name);
-  readMember(obj, "translation", x.translation);
-  readMember(obj, "rotation", x.rotation);
+  readMember(obj, "pos", x.translation);
+  readMember(obj, "rot", x.rotation);
   return true;
 }
 
@@ -122,18 +122,20 @@ JsonGenericValue toJsonValue(const esp::physics::ArticulatedObjectKeyframe& x,
                              JsonAllocator& allocator) {
   JsonGenericValue obj(rapidjson::kObjectType);
   addMember(obj, "name", x.name, allocator);
-  addMember(obj, "translation", x.translation, allocator);
-  addMember(obj, "rotation", x.rotation, allocator);
-  addMember(obj, "jointPositions", x.jointPositions, allocator);
+  // note field renaming to reduce JSON filesize
+  addMember(obj, "pos", x.translation, allocator);
+  addMember(obj, "rot", x.rotation, allocator);
+  addMember(obj, "joints", x.jointPositions, allocator);
   return obj;
 }
 
 bool fromJsonValue(const JsonGenericValue& obj,
                    esp::physics::ArticulatedObjectKeyframe& x) {
   readMember(obj, "name", x.name);
-  readMember(obj, "translation", x.translation);
-  readMember(obj, "rotation", x.rotation);
-  readMember(obj, "jointPositions", x.jointPositions);
+  // note field renaming to reduce JSON filesize
+  readMember(obj, "pos", x.translation);
+  readMember(obj, "rot", x.rotation);
+  readMember(obj, "joints", x.jointPositions);
   return true;
 }
 
