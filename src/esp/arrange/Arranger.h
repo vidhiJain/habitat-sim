@@ -5,6 +5,7 @@
 #ifndef ESP_ARRANGERECORDER_ARRANGER_H_
 #define ESP_ARRANGERECORDER_ARRANGER_H_
 
+#include "esp/gfx/Debug3DText.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/sim/Simulator.h"
@@ -16,7 +17,8 @@ class Arranger {
  public:
   Arranger(esp::sim::Simulator* simulator,
            esp::gfx::RenderCamera* renderCamera,
-           esp::gfx::DebugRender* debugRender);
+           esp::gfx::DebugRender* debugRender,
+           esp::gfx::Debug3DText* debug3dText);
 
   void setCursor(const Magnum::Vector2i& cursor) { cursor_ = cursor; }
 
@@ -46,17 +48,20 @@ class Arranger {
   void updateWaitingForSceneRest(float dt,
                                  bool isPrimaryButton,
                                  bool isSecondaryButton);
+  int markAndCountActivePhysicsObjects();
 
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
   esp::gfx::DebugRender* debugRender_ = nullptr;
+  esp::gfx::Debug3DText* debug3dText_ = nullptr;
   Magnum::Vector2i cursor_;
   std::vector<int> existingObjectIds_;
   int heldObjId_ = -1;
   int recentHeldObjRotIndex_ = 0;
   Corrade::Containers::Optional<LinkAnimation> linkAnimOpt_;
   float timeSinceLastSimulation_ = 0.f;
-  bool waitingForSceneRest_ = false;
+  bool waitingForSceneRest_ = true;  // wait for rest on scene load
+  std::string userInputStatus_;
 };
 
 }  // namespace arrange_recorder

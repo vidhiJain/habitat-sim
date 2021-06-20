@@ -132,7 +132,9 @@ class ArrangeRecorder : public Mn::Platform::Application {
   bool showFPS_ = false;
 
   esp::gfx::DebugRender debugRender_;
+  esp::gfx::Debug3DText debug3dText_;
   std::unique_ptr<esp::arrange_recorder::Arranger> arranger_;
+  Mn::Vector2i recentCursorPos_;
 
   void bindRenderTarget();
 };
@@ -266,7 +268,7 @@ void ArrangeRecorder::createSimulator() {
       Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
 
   arranger_ = std::make_unique<esp::arrange_recorder::Arranger>(
-      simulator_.get(), renderCamera_, &debugRender_);
+      simulator_.get(), renderCamera_, &debugRender_, &debug3dText_);
   restoreFromPhysicsKeyframe();
 }
 
@@ -378,6 +380,7 @@ void ArrangeRecorder::drawEvent() {
     timeSinceLastSimulation = fmod(timeSinceLastSimulation, 1.0 / 60.0);
   }
 
+  arranger_->setCursor(recentCursorPos_);
   arranger_->update(timeline_.previousFrameDuration(), false, false);
 
   {
@@ -427,6 +430,14 @@ void ArrangeRecorder::drawEvent() {
   Mn::GL::defaultFramebuffer.bind();
 
   imgui_.newFrame();
+
+  {
+    const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
+    Mn::Matrix4 camM(renderCamera_->cameraMatrix());
+    Mn::Matrix4 projM(renderCamera_->projectionMatrix());
+    debug3dText_.flushToImGui(projM * camM, viewportSize);
+  }
+
   if (showFPS_) {
     ImGui::SetNextWindowPos(ImVec2(10, 10));
     ImGui::Begin("main", NULL,
@@ -536,7 +547,8 @@ void ArrangeRecorder::viewportEvent(ViewportEvent& event) {
 
 void ArrangeRecorder::mousePressEvent(MouseEvent& event) {
   if (event.button() == MouseEvent::Button::Left) {
-    arranger_->setCursor(event.position());
+    recentCursorPos_ = event.position();
+    arranger_->setCursor(recentCursorPos_);
     arranger_->update(0.f, true, false);
   }
 
@@ -568,7 +580,7 @@ void ArrangeRecorder::mouseScrollEvent(MouseScrollEvent& event) {
 }  // ArrangeRecorder::mouseScrollEvent
 
 void ArrangeRecorder::mouseMoveEvent(MouseMoveEvent& event) {
-  arranger_->setCursor(event.position());
+  recentCursorPos_ = event.position();
 
   if ((event.buttons() & MouseMoveEvent::Button::Right)) {
     const Mn::Vector2i delta = event.relativePosition();

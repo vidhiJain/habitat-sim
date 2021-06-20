@@ -31,31 +31,6 @@ float getDisplayRadiusForObject(esp::sim::Simulator& simulator, int objId) {
   return getDisplayRadiusForNode(simulator.getObjectSceneNode(objId));
 }
 
-int getNumActivePhysicsObjects(esp::sim::Simulator& simulator) {
-  int count = 0;
-
-  auto handles =
-      simulator.getArticulatedObjectManager()->getObjectHandlesBySubstring();
-  for (const auto& handle : handles) {
-    auto artObj =
-        simulator.getArticulatedObjectManager()->getObjectByHandle(handle);
-    if (artObj->isActive()) {
-      count++;
-    }
-  }
-
-  handles = simulator.getRigidObjectManager()->getObjectHandlesBySubstring();
-  for (const auto& handle : handles) {
-    auto rigidObj =
-        simulator.getRigidObjectManager()->getObjectByHandle(handle);
-    if (rigidObj->isActive()) {
-      count++;
-    }
-  }
-
-  return count;
-}
-
 void forcePhysicsSceneAsleep(esp::sim::Simulator& simulator) {
   auto handles =
       simulator.getArticulatedObjectManager()->getObjectHandlesBySubstring();
@@ -77,10 +52,12 @@ void forcePhysicsSceneAsleep(esp::sim::Simulator& simulator) {
 
 Arranger::Arranger(esp::sim::Simulator* simulator,
                    esp::gfx::RenderCamera* renderCamera,
-                   esp::gfx::DebugRender* debugRender)
+                   esp::gfx::DebugRender* debugRender,
+                   esp::gfx::Debug3DText* debug3dText)
     : simulator_(simulator),
       renderCamera_(renderCamera),
-      debugRender_(debugRender) {
+      debugRender_(debugRender),
+      debug3dText_(debug3dText) {
   existingObjectIds_ = simulator_->getExistingObjectIDs();
 }
 
@@ -147,8 +124,9 @@ void Arranger::updateForLinkAnimation(float dt,
   jointVels[linkAnim.jointPosOffset] = vel;
   artObj->setJointVelocities(jointVels);
 
-  static float animMaxDuration = 9.f;  // todo: tunable
-  if (isNearEndPos || linkAnim.animTimer > animMaxDuration) {
+  static float animMaxDuration = 10.f;  // todo: tunable
+  if (isNearEndPos || linkAnim.animTimer > animMaxDuration ||
+      isSecondaryButton) {
     if (isNearEndPos) {
       // animation is finished so snap to end pos
       auto jointPositions = artObj->getJointPositions();
@@ -227,6 +205,7 @@ void Arranger::updateIdle(float dt,
                                          .endPos = animEndPos,
                                          .animTimer = 0.f,
                                          .animDuration = animDuration};
+            userInputStatus_ = "animating... (F to cancel)";
           }
         }
       }
@@ -332,8 +311,15 @@ void Arranger::updateWaitingForSceneRest(float dt,
   if (isSecondaryButton) {
     forcePhysicsSceneAsleep(*simulator_);
     waitingForSceneRest_ = false;
-  } else if (getNumActivePhysicsObjects(*simulator_) == 0) {
-    waitingForSceneRest_ = false;
+    userInputStatus_.clear();
+  } else {
+    int count = markAndCountActivePhysicsObjects();
+    if (count == 0) {
+      waitingForSceneRest_ = false;
+      userInputStatus_.clear();
+    } else {
+      userInputStatus_ = "settling... (F to cancel)";
+    }
   }
 
   if (!waitingForSceneRest_) {
@@ -360,6 +346,13 @@ void Arranger::update(float dt, bool isPrimaryButton, bool isSecondaryButton) {
 
   if (!doFreezePhysicsTime) {
     updatePhysicsWorld(dt);
+  }
+
+  if (!userInputStatus_.empty()) {
+    // get point along cursor ray, somewhat far away
+    auto ray = renderCamera_->unproject(cursor_);
+    auto pos = ray.origin + ray.direction * 4.f;
+    debug3dText_->addText(std::string(userInputStatus_), pos);
   }
 }
 
@@ -390,6 +383,35 @@ void Arranger::updatePhysicsWorld(float dt) {
     // reset timeSinceLastSimulation_, accounting for potential overflow
     timeSinceLastSimulation_ = fmod(timeSinceLastSimulation_, 1.0 / 60.0);
   }
+}
+
+int Arranger::markAndCountActivePhysicsObjects() {
+  int count = 0;
+
+  auto handles =
+      simulator_->getArticulatedObjectManager()->getObjectHandlesBySubstring();
+  for (const auto& handle : handles) {
+    auto artObj =
+        simulator_->getArticulatedObjectManager()->getObjectByHandle(handle);
+    if (artObj->isActive()) {
+      debug3dText_->addText("active", artObj->getTranslation(),
+                            Mn::Color4(1.f, 0.5, 0.f, 1.f));
+      count++;
+    }
+  }
+
+  handles = simulator_->getRigidObjectManager()->getObjectHandlesBySubstring();
+  for (const auto& handle : handles) {
+    auto rigidObj =
+        simulator_->getRigidObjectManager()->getObjectByHandle(handle);
+    if (rigidObj->isActive()) {
+      debug3dText_->addText("active", rigidObj->getTranslation(),
+                            Mn::Color4(1.f, 0.0, 0.f, 1.f));
+      count++;
+    }
+  }
+
+  return count;
 }
 
 }  // namespace arrange_recorder
