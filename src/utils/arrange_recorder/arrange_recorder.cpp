@@ -161,6 +161,10 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
     spec->orientation = {0, 0, 0};
     spec->resolution = esp::vec2i(viewportSize[1], viewportSize[0]);
   };
+
+  // add the camera color sensor
+  // for historical reasons, we call it "rgba_camera"
+  addCameraSensor("rgba_camera", esp::sensor::SensorType::Color);
 }
 
 void ArrangeRecorder::createSimulator() {
@@ -174,7 +178,6 @@ void ArrangeRecorder::createSimulator() {
   }
 
   objectAttrManager_ = simulator_->getObjectAttributesManager();
-  objectAttrManager_->loadAllJSONConfigsFromPath(args.value("object-dir"));
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
