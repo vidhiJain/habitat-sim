@@ -191,7 +191,7 @@ void SceneDatasetAttributesManager::setValsFromJSONDoc(
                               .first;
 
                       dsAttribs->setArticulatedObjectModelFilename(
-                          key, aoFullFileName);
+                          key, aoModelName);  // temp hack
                     }
                   }
                   LOG(INFO) << "::loadAllFileBasedTemplates : Specified "
