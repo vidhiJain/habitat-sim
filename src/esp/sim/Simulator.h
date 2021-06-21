@@ -915,12 +915,16 @@ class Simulator {
     return esp::physics::RaycastResults();
   }
 
-  esp::physics::RaycastResults castSphere(const esp::geo::Ray& ray,
-                                          float radius,
-                                          double maxDistance = 100.0,
-                                          int sceneID = 0) {
+  esp::physics::RaycastResults castSphere(
+      const esp::geo::Ray& ray,
+      float radius,
+      esp::physics::CollisionGroup collisionGroup =
+          esp::physics::CollisionGroup::Default,
+      double maxDistance = 100.0,
+      int sceneID = 0) {
     if (sceneHasPhysics(sceneID)) {
-      return physicsManager_->castSphere(ray, radius, maxDistance);
+      return physicsManager_->castSphere(ray, radius, collisionGroup,
+                                         maxDistance);
     }
     return esp::physics::RaycastResults();
   }
@@ -1389,9 +1393,9 @@ class Simulator {
     return physicsManager_->saveKeyframe();
   }
 
-  void restoreFromPhysicsKeyframe(
-      const esp::physics::PhysicsKeyframe& keyframe) {
-    physicsManager_->restoreFromKeyframe(keyframe);
+  void restoreFromPhysicsKeyframe(const esp::physics::PhysicsKeyframe& keyframe,
+                                  bool activate = false) {
+    physicsManager_->restoreFromKeyframe(keyframe, activate);
   }
 
  protected:
