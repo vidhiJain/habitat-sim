@@ -11,7 +11,7 @@ namespace arrange {
 
 /*
 struct UserAction {
-  bool isInitialSettling = false;
+  bool isSettlingAction = false;
   std::string rigidObj;
   std::string articulatedObj;
   int articulatedLink = -1;
@@ -23,7 +23,7 @@ struct UserAction {
 esp::io::JsonGenericValue toJsonValue(const UserAction& x,
                                       esp::io::JsonAllocator& allocator) {
   esp::io::JsonGenericValue obj(rapidjson::kObjectType);
-  esp::io::addMember(obj, "isInitialSettling", x.isInitialSettling, allocator);
+  esp::io::addMember(obj, "isSettlingAction", x.isSettlingAction, allocator);
   esp::io::addMember(obj, "rigidObj", x.rigidObj, allocator);
   esp::io::addMember(obj, "articulatedObj", x.articulatedObj, allocator);
   esp::io::addMember(obj, "articulatedLink", x.articulatedLink, allocator);
@@ -33,7 +33,7 @@ esp::io::JsonGenericValue toJsonValue(const UserAction& x,
 }
 
 bool fromJsonValue(const esp::io::JsonGenericValue& obj, UserAction& x) {
-  esp::io::readMember(obj, "isInitialSettling", x.isInitialSettling);
+  esp::io::readMember(obj, "isSettlingAction", x.isSettlingAction);
   esp::io::readMember(obj, "rigidObj", x.rigidObj);
   esp::io::readMember(obj, "articulatedObj", x.articulatedObj);
   esp::io::readMember(obj, "articulatedLink", x.articulatedLink);
@@ -59,7 +59,12 @@ esp::io::JsonGenericValue toJsonValue(const Session& x,
   return obj;
 }
 
-bool fromJsonValue(const esp::io::JsonGenericValue& obj, Session& x) {}
+bool fromJsonValue(const esp::io::JsonGenericValue& obj, Session& x) {
+  esp::io::readMember(obj, "scene", x.scene);
+  esp::io::readMember(obj, "userActions", x.userActions);
+  esp::io::readMember(obj, "keyframes", x.keyframes);
+  return true;
+}
 
 }  // namespace arrange
 }  // namespace esp

@@ -15,7 +15,7 @@ namespace esp {
 namespace arrange {
 
 struct UserAction {
-  bool isInitialSettling = false;
+  bool isSettlingAction = false;
   std::string rigidObj;
   std::string articulatedObj;
   int articulatedLink = -1;
