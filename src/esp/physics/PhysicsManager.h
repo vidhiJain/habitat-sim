@@ -806,9 +806,11 @@ class PhysicsManager : public std::enable_shared_from_this<PhysicsManager> {
     return results;
   }
 
-  virtual RaycastResults castSphere(const esp::geo::Ray& ray,
-                                    float radius,
-                                    CORRADE_UNUSED double maxDistance = 100.0) {
+  virtual RaycastResults castSphere(
+      const esp::geo::Ray& ray,
+      float radius,
+      CollisionGroup collisionGroup = CollisionGroup::Default,
+      CORRADE_UNUSED double maxDistance = 100.0) {
     RaycastResults results;
     results.ray = ray;
     return results;
@@ -851,7 +853,8 @@ class PhysicsManager : public std::enable_shared_from_this<PhysicsManager> {
   }
 
   PhysicsKeyframe saveKeyframe();
-  void restoreFromKeyframe(const PhysicsKeyframe& keyframe);
+  void restoreFromKeyframe(const PhysicsKeyframe& keyframe,
+                           bool activate = false);
 
  protected:
   /** @brief Check that a given object ID is valid (i.e. it refers to an

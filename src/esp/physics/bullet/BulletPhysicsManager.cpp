@@ -143,6 +143,12 @@ int BulletPhysicsManager::addArticulatedObjectFromURDF(
 
   // TODO: set these flags up better
   u2b->flags = 0;
+
+  // temp enable collision between links, except for parent-child links
+  urdfImporter_->flags |= ConvertURDFFlags::CUF_USE_SELF_COLLISION;
+  urdfImporter_->flags |=
+      ConvertURDFFlags::CUF_USE_SELF_COLLISION_EXCLUDE_PARENT;
+
   u2b->initURDF2BulletCache();
 
   articulatedObject->initializeFromURDF(*urdfImporter_, {}, physicsNode_);
@@ -532,6 +538,7 @@ RaycastResults BulletPhysicsManager::castRay(const esp::geo::Ray& ray,
 
 RaycastResults BulletPhysicsManager::castSphere(const esp::geo::Ray& ray,
                                                 float radius,
+                                                CollisionGroup collisionGroup,
                                                 double maxDistance) {
   RaycastResults results;
   results.ray = ray;
@@ -556,6 +563,9 @@ RaycastResults BulletPhysicsManager::castSphere(const esp::geo::Ray& ray,
 
   btCollisionWorld::ClosestConvexResultCallback closestResult(from.getOrigin(),
                                                               to.getOrigin());
+  closestResult.m_collisionFilterGroup = int(collisionGroup);
+  closestResult.m_collisionFilterMask =
+      uint32_t(CollisionGroupHelper::getMaskForGroup(collisionGroup));
   bWorld_->convexSweepTest(sphereShape_.get(), from, to, closestResult);
 
   // convert to RaycastResults

@@ -253,9 +253,11 @@ class BulletPhysicsManager : public PhysicsManager {
   RaycastResults castRay(const esp::geo::Ray& ray,
                          double maxDistance = 100.0) override;
 
-  RaycastResults castSphere(const esp::geo::Ray& ray,
-                            float radius,
-                            double maxDistance = 100.0) override;
+  RaycastResults castSphere(
+      const esp::geo::Ray& ray,
+      float radius,
+      CollisionGroup collisionGroup = CollisionGroup::Default,
+      double maxDistance = 100.0) override;
 
   /**
    * @brief Query the number of contact points that were active during the

@@ -600,7 +600,8 @@ PhysicsKeyframe PhysicsManager::saveKeyframe() {
   return keyframe;
 }
 // todo: move out of PhysicsManager and implement in terms of object managers
-void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
+void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
+                                         bool activate) {
   if (keyframe.articulatedObjects.empty() && keyframe.rigidObjects.empty()) {
     LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: empty keyframe";
     return;
@@ -616,6 +617,13 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
       }
 
       found = true;
+      if (artObj->getMotionType() == esp::physics::MotionType::STATIC) {
+        LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: art obj "
+                   << keyframeArtObj.name
+                   << " has MotionType::STATIC and can't be restored.";
+        break;
+      }
+
       artObj->setTranslation(keyframeArtObj.translation);
       artObj->setRotation(keyframeArtObj.rotation);
       artObj->setJointPositions(keyframeArtObj.jointPositions);
@@ -627,7 +635,7 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
         artObj->setJointForces(zeros);
         artObj->setRootLinearVelocity(Mn::Vector3(Mn::Math::ZeroInit));
         artObj->setRootAngularVelocity(Mn::Vector3(Mn::Math::ZeroInit));
-        artObj->setActive(false);
+        artObj->setActive(activate);
       }
       break;
     }
@@ -647,13 +655,20 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe) {
       }
 
       found = true;
+      if (rigidObj->getMotionType() == esp::physics::MotionType::STATIC) {
+        LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: rigid obj "
+                   << keyframeRigidObj.name
+                   << " has MotionType::STATIC and can't be restored.";
+        break;
+      }
+
       rigidObj->setTranslation(keyframeRigidObj.translation);
       rigidObj->setRotation(keyframeRigidObj.rotation);
 
       if (rigidObj->getMotionType() == esp::physics::MotionType::DYNAMIC) {
         rigidObj->setLinearVelocity(Mn::Vector3(Mn::Math::ZeroInit));
         rigidObj->setAngularVelocity(Mn::Vector3(Mn::Math::ZeroInit));
-        rigidObj->setActive(false);
+        rigidObj->setActive(activate);
       }
       break;
     }
