@@ -4,6 +4,8 @@
 
 #include "Arranger.h"
 
+#include "BulletDynamics/Dynamics/btRigidBody.h"  // for gDeactivationTime
+
 namespace esp {
 namespace arrange {
 
@@ -11,6 +13,9 @@ namespace {
 
 static const int PHYSICS_SAVE_PERIOD =
     4;  // save a keyframe every n physics steps (see also physicsTimestep_)
+
+static const esp::physics::CollisionGroup PICKER_COLLISION_GROUP =
+    esp::physics::CollisionGroup::UserGroup2;
 
 float calcLerpFraction(float src0, float src1, float x) {
   CORRADE_INTERNAL_ASSERT(src1 != src0);
@@ -61,9 +66,12 @@ Arranger::Arranger(esp::sim::Simulator* simulator,
       renderCamera_(renderCamera),
       debugRender_(debugRender),
       debug3dText_(debug3dText) {
-  existingObjectIds_ = simulator_->getExistingObjectIDs();
+  session_.scene = simulator_->getMetadataMediator()
+                       ->getSimulatorConfiguration()
+                       .activeSceneName;
 
-  session_.scene = "placeholder";
+  // see src/deps/bullet3/src/BulletDynamics/Dynamics/btRigidBody.cpp
+  gDeactivationTime = 0.75;  // todo: tunable
 
   // see data/default.physics_config.json timestep
   physicsTimestep_ = simulator_->getMetadataMediator()
@@ -74,23 +82,50 @@ Arranger::Arranger(esp::sim::Simulator* simulator,
   session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
 
   // restore from current physics keyframe; this will put the physics sim into a
-  // more consistent state, e.g. zero velocities
-  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back());
-  // stepping here allows bodies that want to go to sleep to actually go to
-  // sleep
-  simulator_->stepWorld(-1);
+  // more consistent state, e.g. zero velocities. We also activate all bodies
+  // because we're starting a settling action.
+  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
+                                         /*activate*/ true);
 
   CORRADE_INTERNAL_ASSERT(!activeUserAction_);
   activeUserAction_ = UserAction();
-  activeUserAction_->isInitialSettling = true;
+  activeUserAction_->isSettlingAction = true;
   activeUserAction_->startFrame = session_.keyframes.size() - 1;
-  LOG(INFO) << "Starting initial-settling user action on frame " +
+  LOG(INFO) << "Starting \"settling\" user action on frame " +
                    activeUserAction_->startFrame;
 }
 
-void Arranger::updateForLinkAnimation(float dt,
-                                      bool isPrimaryButton,
-                                      bool isSecondaryButton) {
+void Arranger::updateCamera(float dt, ButtonSet buttonSet) {
+  if (config_.cameras.empty()) {
+    // todo
+    return;
+  }
+
+  const int numCameras = config_.cameras.size();
+  cameraIndex_ = std::min(cameraIndex_, int(numCameras - 1));
+
+  if (buttonSet & Button::NextCamera) {
+    cameraIndex_++;
+  } else if (buttonSet & Button::PrevCamera) {
+    cameraIndex_--;
+  }
+
+  cameraIndex_ = (cameraIndex_ + numCameras) % numCameras;
+
+  auto adjustedConfigCam = config_.cameras[cameraIndex_];
+  if (adjustedConfigCam.eye.x() == adjustedConfigCam.lookat.x() &&
+      adjustedConfigCam.eye.z() == adjustedConfigCam.lookat.z()) {
+    adjustedConfigCam.lookat.x() += 1.f;
+  }
+
+  const auto transform =
+      Mn::Matrix4::lookAt(adjustedConfigCam.eye, adjustedConfigCam.lookat,
+                          Mn::Vector3(0.f, 1.f, 0.f));
+
+  renderCamera_->node().setTransformation(transform);
+}
+
+void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
   CORRADE_INTERNAL_ASSERT(linkAnimOpt_);
   auto& linkAnim = *linkAnimOpt_;
 
@@ -111,39 +146,25 @@ void Arranger::updateForLinkAnimation(float dt,
   float animFraction =
       calcLerpFraction(linkAnim.startPos, linkAnim.endPos, jointPos);
   float forceDir = linkAnim.endPos < linkAnim.startPos ? -1.f : 1.f;
-  static float eps = 0.01;
-  bool isNearEndPos = std::abs(jointPos - linkAnim.endPos) < eps;
+  static float posEps = 0.001;
+  bool isNearEndPos = std::abs(jointPos - linkAnim.endPos) < posEps;
 
-#if 0  // force approach
-  // force starts out strong and decreases over time
-  float animForceMagScale = 1.f - animFraction;
+  // Setting joint velocity is not absolute. It seems to work more like force in
+  // that a larger velocity is needed if there's more resistance. This logic
+  // ramps up velocity over time. It's meant to adapt to any amount of
+  // resistance.
+  static float divisionEps = 1e-2;
+  static float maxVelMag = 20.f;
+  static float baseVelMag0 = 0.2f;
+  static float baseVelMag1 = 0.05f;
+  const float baseVelMag =
+      Mn::Math::lerp(baseVelMag0, baseVelMag1, animFraction);
+  static float rampUpTime = 2.0f;
+  float velMag = std::min(maxVelMag, baseVelMag * linkAnim.animTimer /
+                                         (animFraction + divisionEps));
+  velMag *= (std::min(linkAnim.animTimer / rampUpTime, 1.f));
+  // LOG(INFO) << "animTimer: " << linkAnim.animTimer << ", velMag: " << velMag;
 
-  // jointPositions[linkAnim.jointPosOffset] = newPos;
-  // artObj->setJointPositions(jointPositions);
-  auto jointForces = artObj->getJointForces();
-
-  static float maxAccel = 5.f;
-  const float linkMass = 2.f; // temp hack because this is broken: artObj->getLink(linkAnim.linkId)->getMass();
-  float force = forceDir * animForceMagScale * maxAccel * linkMass;
-  jointForces[linkAnim.jointPosOffset] = force;
-  artObj->setJointForces(jointForces);
-#endif
-
-  static float startVel = 0.1f;
-  static float maxVel = 0.75f;
-  static float endVel = 0.1f;
-  static float exp0 = 0.25;  // smaller => faster accel at start of anim
-  static float exp1 = 5.f;   // larger => faster completion of anim
-  float velMag =
-      (animFraction < 0.5)
-          ? Mn::Math::lerp(
-                startVel, maxVel,
-                Mn::Math::pow(
-                    smoothstep(calcLerpFraction(0.f, 0.5, animFraction)), exp0))
-          : Mn::Math::lerp(maxVel, endVel,
-                           Mn::Math::pow(smoothstep(calcLerpFraction(
-                                             0.5f, 1.0, animFraction)),
-                                         exp1));
   // snap to zero vel if near end pos (anim is finished)
   float vel = isNearEndPos ? 0.0f : forceDir * velMag;
 
@@ -153,7 +174,7 @@ void Arranger::updateForLinkAnimation(float dt,
 
   static float animMaxDuration = 10.f;  // todo: tunable
   if (isNearEndPos || linkAnim.animTimer > animMaxDuration ||
-      isSecondaryButton) {
+      buttonSet & Button::Secondary) {
     if (isNearEndPos) {
       // animation is finished so snap to end pos
       auto jointPositions = artObj->getJointPositions();
@@ -166,15 +187,13 @@ void Arranger::updateForLinkAnimation(float dt,
   }
 }
 
-void Arranger::updateIdle(float dt,
-                          bool isPrimaryButton,
-                          bool isSecondaryButton) {
+void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
   CORRADE_INTERNAL_ASSERT(heldObjId_ == -1 && !linkAnimOpt_);
 
   auto ray = renderCamera_->unproject(cursor_);
   static float sphereRadius = 0.01f;
   esp::physics::RaycastResults raycastResults =
-      simulator_->castSphere(ray, sphereRadius);
+      simulator_->castSphere(ray, sphereRadius, PICKER_COLLISION_GROUP);
 
   int mouseoverRigidObjId = -1;
   if (raycastResults.hasHits()) {
@@ -203,7 +222,7 @@ void Arranger::updateIdle(float dt,
       debugRender_->drawCircle(link->getTranslation(), Mn::Vector3(0, 1, 0),
                                0.3f, 16, Mn::Color4(1.f, 0.5, 0.f, 1.f));
 
-      if (isPrimaryButton) {
+      if (buttonSet & Button::Primary) {
         int numJointPos = artObj->getLinkNumJointPos(linkId);
         if (numJointPos == 1) {
           int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
@@ -215,14 +234,26 @@ void Arranger::updateIdle(float dt,
             float upperLimit = upperLimits[jointPosOffset];
             float lowerLimit = lowerLimits[jointPosOffset];
             float animEndPos;
-            if (std::abs(jointPos - upperLimit) <
-                std::abs(jointPos - lowerLimit)) {
-              // closer to upperLimit
-              animEndPos = lowerLimit;
+
+            bool useLowerLimit = false;
+            auto linkMemoryKey =
+                artObjId * 1000 +
+                linkId;  // sloppy hash of object id and link id
+
+            // Decide whether to move to lower limit or upper limit. The logic
+            // here is (1) do the opposite of last time we interacted, or
+            // (2) if it's the first interaction, move to the further-away
+            // limit.
+            if (linkAnimMemory_.count(linkMemoryKey)) {
+              useLowerLimit = !linkAnimMemory_[linkMemoryKey];
             } else {
-              // closer to lowerLimit
-              animEndPos = upperLimit;
+              useLowerLimit = (std::abs(jointPos - upperLimit) <
+                               std::abs(jointPos - lowerLimit));
             }
+
+            animEndPos = useLowerLimit ? lowerLimit : upperLimit;
+            // remember our interaction
+            linkAnimMemory_[linkMemoryKey] = useLowerLimit;
 
             static float animDuration = 2.f;  // todo: tunable
             linkAnimOpt_ = LinkAnimation{.artObjId = artObjId,
@@ -241,7 +272,12 @@ void Arranger::updateIdle(float dt,
                 simulator_->getArticulatedObjectManager()->getObjectHandleByID(
                     artObjId);
             activeUserAction_->articulatedLink = linkId;
-            activeUserAction_->startFrame = session_.keyframes.size();
+
+            // duplicate the end frame from the last action
+            session_.keyframes.push_back(session_.keyframes.back());
+            actionPhysicsStepCounter_ = 0;
+
+            activeUserAction_->startFrame = session_.keyframes.size() - 1;
             LOG(INFO) << "Starting user action " << session_.userActions.size()
                       << " on frame " << activeUserAction_->startFrame
                       << " with articulatedObj "
@@ -259,12 +295,12 @@ void Arranger::updateIdle(float dt,
         getDisplayRadiusForObject(*simulator_, mouseoverRigidObjId) * 1.5, 16,
         Mn::Color4::red());
 
-    if (isPrimaryButton) {
+    if (buttonSet & Button::Primary) {
       heldObjId_ = mouseoverRigidObjId;
       auto heldObj =
           simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
       heldObj->setMotionType(esp::physics::MotionType::KINEMATIC);
-      heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Default);
+      heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
       heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
 
       // start user action for this rigid obj
@@ -272,6 +308,11 @@ void Arranger::updateIdle(float dt,
       activeUserAction_ = UserAction();
       activeUserAction_->rigidObj =
           simulator_->getRigidObjectManager()->getObjectHandleByID(heldObjId_);
+
+      // save a start frame that includes the dropped object at it's new pose
+      session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+      actionPhysicsStepCounter_ = 0;
+
       activeUserAction_->startFrame = session_.keyframes.size();
       LOG(INFO) << "Starting user action " << session_.userActions.size()
                 << " on frame " << activeUserAction_->startFrame
@@ -280,12 +321,10 @@ void Arranger::updateIdle(float dt,
   }
 }
 
-void Arranger::updateForHeldObject(float dt,
-                                   bool isPrimaryButton,
-                                   bool isSecondaryButton) {
+void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
   auto heldObj = simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
 
-  if (isSecondaryButton) {
+  if (buttonSet & Button::Secondary) {
     recentHeldObjRotIndex_ =
         (recentHeldObjRotIndex_ + 1) % getNumRotationIndices();
     heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
@@ -301,7 +340,7 @@ void Arranger::updateForHeldObject(float dt,
   // objects like the dishwasher rack
   static float sphereRadius = 0.01f;
   esp::physics::RaycastResults raycastResults =
-      simulator_->castSphere(ray, sphereRadius);
+      simulator_->castSphere(ray, sphereRadius, PICKER_COLLISION_GROUP);
 
   bool foundPreviewPos = false;
   if (raycastResults.hasHits()) {
@@ -339,7 +378,7 @@ void Arranger::updateForHeldObject(float dt,
     }
   }
 
-  if (foundPreviewPos && isPrimaryButton) {
+  if (foundPreviewPos && buttonSet & Button::Primary) {
     heldObj->setMotionType(esp::physics::MotionType::DYNAMIC);
     heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
     heldObjId_ = -1;
@@ -354,12 +393,10 @@ void Arranger::updateForHeldObject(float dt,
   }
 }
 
-void Arranger::updateWaitingForSceneRest(float dt,
-                                         bool isPrimaryButton,
-                                         bool isSecondaryButton) {
+void Arranger::updateWaitingForSceneRest(float dt, ButtonSet buttonSet) {
   CORRADE_INTERNAL_ASSERT(waitingForSceneRest_);
 
-  if (isSecondaryButton) {
+  if (buttonSet & Button::Secondary) {
     forcePhysicsSceneAsleep(*simulator_);
     waitingForSceneRest_ = false;
     userInputStatus_.clear();
@@ -374,34 +411,46 @@ void Arranger::updateWaitingForSceneRest(float dt,
   }
 
   if (!waitingForSceneRest_) {
-    // end the active user action
-    CORRADE_INTERNAL_ASSERT(activeUserAction_);
-    activeUserAction_->endFrame = session_.keyframes.size() - 1;
-    LOG(INFO) << "Ending user action " << session_.userActions.size()
-              << " on frame " << activeUserAction_->endFrame;
-    session_.userActions.emplace_back(std::move(*activeUserAction_));
-    activeUserAction_ = Cr::Containers::NullOpt;
-
-    // restore from current physics keyframe; this will put the physics sim into
-    // a more consistent state, e.g. zero velocities
-    simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back());
-    // stepping here allows bodies that want to go to sleep to actually go to
-    // sleep
-    simulator_->stepWorld(-1);
+    endUserAction();
   }
 }
 
-void Arranger::update(float dt, bool isPrimaryButton, bool isSecondaryButton) {
+void Arranger::endUserAction() {
+  // If we've stepped physics since the most recent keyframe, let's save a new
+  // keyframe to capture the exact end of the action
+  //
+  if (actionPhysicsStepCounter_ > 0) {
+    session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+  }
+
+  CORRADE_INTERNAL_ASSERT(activeUserAction_);
+  activeUserAction_->endFrame = session_.keyframes.size() - 1;
+  LOG(INFO) << "Ending user action " << session_.userActions.size()
+            << " on frame " << activeUserAction_->endFrame;
+  session_.userActions.emplace_back(std::move(*activeUserAction_));
+  activeUserAction_ = Cr::Containers::NullOpt;
+
+  // rewind to recent physics keyframe; this will put the physics sim into
+  // a more consistent state, e.g. zero velocities
+  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
+                                         /*activate*/ false);
+
+  // stepping here allows bodies that want to go to sleep to actually go to
+  // sleep
+  simulator_->stepWorld(-1);
+}
+
+void Arranger::update(float dt, ButtonSet buttonSet) {
   bool doFreezePhysicsTime = true;
 
   if (linkAnimOpt_) {
-    updateForLinkAnimation(dt, isPrimaryButton, isSecondaryButton);
+    updateForLinkAnimation(dt, buttonSet);
   } else if (heldObjId_ != -1) {
-    updateForHeldObject(dt, isPrimaryButton, isSecondaryButton);
+    updateForHeldObject(dt, buttonSet);
   } else if (waitingForSceneRest_) {
-    updateWaitingForSceneRest(dt, isPrimaryButton, isSecondaryButton);
+    updateWaitingForSceneRest(dt, buttonSet);
   } else {
-    updateIdle(dt, isPrimaryButton, isSecondaryButton);
+    updateIdle(dt, buttonSet);
   }
 
   bool doAdvancePhysicsTime = (linkAnimOpt_ || waitingForSceneRest_);
@@ -415,6 +464,8 @@ void Arranger::update(float dt, bool isPrimaryButton, bool isSecondaryButton) {
     auto pos = ray.origin + ray.direction * 4.f;
     debug3dText_->addText(std::string(userInputStatus_), pos);
   }
+
+  updateCamera(dt, buttonSet);
 }
 
 int Arranger::getNumRotationIndices() {
@@ -435,22 +486,34 @@ Mn::Quaternion Arranger::getRotationByIndex(int index) {
 void Arranger::updatePhysicsWorld(float dt) {
   timeSinceLastSimulation_ += dt;
 
+  constexpr int maxStepsPerUpdate = 6;  // capped to prevent low fps in app
+  int numStepsThisUpdate = 0;
+
+  static int stepCounter = 0;
+  // todo: prevent huge framerate drop
   while (timeSinceLastSimulation_ >= physicsTimestep_) {
     // step physics at a fixed rate
     simulator_->stepWorld(-1);
     timeSinceLastSimulation_ -= physicsTimestep_;
 
-    physicsStepCounter_++;
-    if (physicsStepCounter_ % PHYSICS_SAVE_PERIOD == 0) {
+    actionPhysicsStepCounter_++;
+    numStepsThisUpdate++;
+    stepCounter++;
+    if (actionPhysicsStepCounter_ % PHYSICS_SAVE_PERIOD == 0) {
       session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+    }
+
+    if (numStepsThisUpdate == maxStepsPerUpdate) {
+      timeSinceLastSimulation_ = 0.f;
+      break;
     }
   }
 
 #if 0  // debug reference code
   static float elapsedTime = 0.f;
   elapsedTime += dt;
-  if (physicsStepCounter_ % 10 == 9) {
-    float stepRate = physicsStepCounter_ / elapsedTime;
+  if (stepCounter % 10 == 9) {
+    float stepRate = stepCounter / elapsedTime;
     LOG(INFO) << "stepRate: " << stepRate;
   }
 #endif
@@ -483,6 +546,36 @@ int Arranger::markAndCountActivePhysicsObjects() {
   }
 
   return count;
+}
+
+void Arranger::configureCollisionGroups() {
+  const esp::physics::CollisionGroup staticUrdfLinksGroup =
+      esp::physics::CollisionGroup::UserGroup0;
+
+  // configure collision groups before initializing sim
+  esp::physics::CollisionGroupHelper::setMaskForGroup(
+      staticUrdfLinksGroup, esp::physics::CollisionGroups());
+  esp::physics::CollisionGroupHelper::setMaskForGroup(
+      PICKER_COLLISION_GROUP, esp::physics::CollisionGroups());
+
+  auto enableInteracts = [](esp::physics::CollisionGroup a,
+                            esp::physics::CollisionGroup b) {
+    esp::physics::CollisionGroupHelper::setGroupInteractsWith(a, b, true);
+    esp::physics::CollisionGroupHelper::setGroupInteractsWith(b, a, true);
+  };
+
+  // note that Static and Dynamic are already set to interact with certain
+  // non-user groups
+
+  enableInteracts(staticUrdfLinksGroup, staticUrdfLinksGroup);
+  enableInteracts(staticUrdfLinksGroup, esp::physics::CollisionGroup::Dynamic);
+  enableInteracts(staticUrdfLinksGroup, PICKER_COLLISION_GROUP);
+
+  enableInteracts(PICKER_COLLISION_GROUP, esp::physics::CollisionGroup::Static);
+  enableInteracts(PICKER_COLLISION_GROUP,
+                  esp::physics::CollisionGroup::Dynamic);
+  enableInteracts(PICKER_COLLISION_GROUP,
+                  esp::physics::CollisionGroup::Kinematic);
 }
 
 }  // namespace arrange

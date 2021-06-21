@@ -82,6 +82,7 @@ class ArrangeRecorder : public Mn::Platform::Application {
   std::string getActiveSceneSimplifiedName();
   std::string findNewSessionSaveFilepath();
   std::string getActiveScenePhysicsKeyframeFilepath();
+  void checkReloadConfig(float dt);
 
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
@@ -117,6 +118,7 @@ class ArrangeRecorder : public Mn::Platform::Application {
   // store these so we can recreate the simulator
   Cr::Utility::Arguments args_;
   esp::sim::SimulatorConfiguration simConfig_;
+  esp::metadata::attributes::SceneAttributes::ptr sceneAttr_;
 
   // The managers belonging to the simulator
   std::shared_ptr<esp::metadata::managers::ObjectAttributesManager>
@@ -188,6 +190,9 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
 void ArrangeRecorder::createSimulator() {
   auto& args = args_;
 
+  esp::arrange::Arranger::configureCollisionGroups();  // run this before
+                                                       // creating sim
+
   if (simulator_) {
     simulator_->close();
     simulator_->reconfigure(simConfig_);
@@ -199,6 +204,8 @@ void ArrangeRecorder::createSimulator() {
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
+  sceneAttr_ = simulator_->getMetadataMediator()->getSceneAttributesByName(
+      simConfig_.activeSceneName);
 
   // NavMesh customization options
   if (args.isSet("disable-navmesh")) {
@@ -257,28 +264,9 @@ void ArrangeRecorder::createSimulator() {
   agentBodyNode_ = &defaultAgent_->node();
   renderCamera_ = getAgentCamera().getRenderCamera();
 
-  // temp hard-coded add URDF models (soon, we can include them in the scene
-  // instance file)
-  const std::vector<std::string> filepaths = {
-      "data/lighthouse_kitchen_dataset/urdf/dishwasher_urdf/"
-      "ktc_dishwasher.urdf",
-      "data/lighthouse_kitchen_dataset/urdf/kitchen_oven/kitchen_oven.urdf"};
+  // place agent at origin; we'll move the camera for this app but not the agent
+  agentBodyNode_->setTransformation(Mn::Matrix4(Mn::Math::IdentityInit));
 
-  for (const auto& filepath : filepaths) {
-    const bool fixedBase = true;
-    const auto& artObjMgr = simulator_->getArticulatedObjectManager();
-    const auto artObj = artObjMgr->addBulletArticulatedObjectFromURDF(
-        filepath, fixedBase, 1.f, 1.f, true);
-    // artObj->setMotionType(esp::physics::MotionType::KINEMATIC);
-    // note: positioning will be done via restoreFromPhysicsKeyframe
-  }
-
-  // temp place agent and camera for dishwasher loading
-  agentBodyNode_->setTranslation(Mn::Vector3(-0.045473, 0, -0.418929));
-
-  auto agentRot = Mn::Quaternion({0, -0.256289, 0}, 0.9666);
-
-  agentBodyNode_->setRotation(agentRot);
   renderCamera_->node().setTranslation(Mn::Vector3(0, 0.316604, 0.610451));
   renderCamera_->node().setRotation(
       Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
@@ -322,6 +310,8 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
                "Instead of recording an arrangement session, use the arranger "
                "to edit the scene's start state. This modifies "
                "scenes/sceneName.physics_keyframe.json.")
+      .addOption("arrange-config")
+      .setHelp("arrange-config", "filepath to arrange config json file")
       .parse(arguments.argc, arguments.argv);
 
   const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
@@ -391,8 +381,11 @@ void ArrangeRecorder::drawEvent() {
     moveAndLook(1);
   }
 
+  checkReloadConfig(timeline_.previousFrameDuration());
+
   arranger_->setCursor(recentCursorPos_);
-  arranger_->update(timeline_.previousFrameDuration(), false, false);
+  arranger_->update(timeline_.previousFrameDuration(),
+                    esp::arrange::Arranger::ButtonSet());
 
   checkSaveArrangerSession();
 
@@ -452,16 +445,12 @@ void ArrangeRecorder::drawEvent() {
   }
 
   if (showFPS_) {
-    ImGui::SetNextWindowPos(ImVec2(10, 10));
+    ImGui::SetNextWindowPos(ImVec2(5, 5));
     ImGui::Begin("main", NULL,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
                      ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::SetWindowFontScale(1.5);
+    ImGui::SetWindowFontScale(1.0);
     ImGui::Text("%.1f FPS", Mn::Double(ImGui::GetIO().Framerate));
-    uint32_t total = activeSceneGraph_->getDrawables().size();
-    ImGui::Text("%u drawables", total);
-    auto& cam = getAgentCamera();
-
     ImGui::End();
   }
 
@@ -562,7 +551,7 @@ void ArrangeRecorder::mousePressEvent(MouseEvent& event) {
   if (event.button() == MouseEvent::Button::Left) {
     recentCursorPos_ = event.position();
     arranger_->setCursor(recentCursorPos_);
-    arranger_->update(0.f, true, false);
+    arranger_->update(0.f, esp::arrange::Arranger::Button::Primary);
   }
 
   event.setAccepted();
@@ -630,9 +619,15 @@ void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
       }
     } break;
     case KeyEvent::Key::F:
-      arranger_->update(0.f, false, true);
+      arranger_->update(0.f, esp::arrange::Arranger::Button::Secondary);
+      break;
+    case KeyEvent::Key::X:
+      arranger_->update(0.f, esp::arrange::Arranger::Button::PrevCamera);
       break;
     case KeyEvent::Key::C:
+      arranger_->update(0.f, esp::arrange::Arranger::Button::NextCamera);
+      break;
+    case KeyEvent::Key::V:
       showFPS_ = !showFPS_;
       break;
     case KeyEvent::Key::Esc:
@@ -699,7 +694,7 @@ void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
     auto newDoc = esp::io::parseJsonFile(filepath);
     esp::physics::PhysicsKeyframe keyframe;
     esp::io::readMember(newDoc, "keyframe", keyframe);
-    simulator_->restoreFromPhysicsKeyframe(keyframe);
+    simulator_->restoreFromPhysicsKeyframe(keyframe, /*activate*/ false);
   } catch (...) {
     LOG(ERROR)
         << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: failed to parse "
@@ -718,11 +713,7 @@ void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
 }
 
 std::string ArrangeRecorder::getActiveSceneSimplifiedName() {
-  auto sceneInstanceAttr =
-      simulator_->getMetadataMediator()->getSceneAttributesByName(
-          simConfig_.activeSceneName);
-  return sceneInstanceAttr ? sceneInstanceAttr->getSimplifiedHandle()
-                           : "noActiveScene";
+  return sceneAttr_ ? sceneAttr_->getSimplifiedHandle() : "noActiveScene";
 }
 
 std::string ArrangeRecorder::findNewSessionSaveFilepath() {
@@ -769,6 +760,45 @@ void ArrangeRecorder::checkSaveArrangerSession() {
     LOG(INFO) << "Session saved to " << filepath;
 
     numSavedArrangerUserActions_ = session.userActions.size();
+  }
+}
+
+// hot-reload arrange config json every n seconds
+void ArrangeRecorder::checkReloadConfig(float dt) {
+  constexpr float reloadPeriod = 1.f;
+  static float elapsed = reloadPeriod;
+  elapsed += dt;
+  if (elapsed >= reloadPeriod) {
+    elapsed -= reloadPeriod;
+
+    const std::string filepath = args_.value("arrange-config");
+    if (filepath.empty()) {
+      return;
+    }
+
+    if (!Corrade::Utility::Directory::exists(filepath)) {
+      LOG(WARNING) << "ArrangeRecorder::checkReloadConfig: writing a new empty "
+                      "arrange config at "
+                   << filepath;
+      esp::arrange::Config config;
+      config.cameras.push_back(esp::arrange::ConfigCamera());
+      rapidjson::Document d(rapidjson::kObjectType);
+      rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+      esp::io::addMember(d, "config", config, allocator);
+      esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ true,
+                               /*maxDecimalPlaces*/ 5);
+    }
+
+    try {
+      auto newDoc = esp::io::parseJsonFile(filepath);
+      esp::arrange::Config config;
+      esp::io::readMember(newDoc, "config", config);
+      arranger_->setConfig(config);
+    } catch (...) {
+      LOG(ERROR) << "ArrangeRecorder::checkReloadConfig: failed to parse "
+                    "arrange config from "
+                 << filepath;
+    }
   }
 }
 

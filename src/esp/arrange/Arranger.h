@@ -5,11 +5,14 @@
 #ifndef ESP_ARRANGE_ARRANGER_H_
 #define ESP_ARRANGE_ARRANGER_H_
 
+#include <unordered_map>
+
 #include "esp/gfx/Debug3DText.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/sim/Simulator.h"
 
+#include "Config.h"
 #include "Session.h"
 
 namespace esp {
@@ -17,6 +20,16 @@ namespace arrange {
 
 class Arranger {
  public:
+  enum class Button : Magnum::UnsignedShort {
+    Primary = 1 << 0,
+    Secondary = 1 << 1,
+    Undo = 1 << 2,
+    NextCamera = 1 << 3,
+    PrevCamera = 1 << 4
+  };
+
+  typedef Corrade::Containers::EnumSet<Button> ButtonSet;
+
   Arranger(esp::sim::Simulator* simulator,
            esp::gfx::RenderCamera* renderCamera,
            esp::gfx::DebugRender* debugRender,
@@ -24,9 +37,13 @@ class Arranger {
 
   void setCursor(const Magnum::Vector2i& cursor) { cursor_ = cursor; }
 
-  void update(float dt, bool isPrimaryButton, bool isSecondaryButton);
+  void update(float dt, ButtonSet buttonSet);
 
   const Session& getSession() const { return session_; }
+
+  static void configureCollisionGroups();
+
+  void setConfig(const Config& config) { config_ = config; }
 
  private:
   struct LinkAnimation {
@@ -42,24 +59,20 @@ class Arranger {
   int getNumRotationIndices();
   Mn::Quaternion getRotationByIndex(int index);
   void updatePhysicsWorld(float dt);
-  void updateForLinkAnimation(float dt,
-                              bool isPrimaryButton,
-                              bool isSecondaryButton);
-  void updateIdle(float dt, bool isPrimaryButton, bool isSecondaryButton);
-  void updateForHeldObject(float dt,
-                           bool isPrimaryButton,
-                           bool isSecondaryButton);
-  void updateWaitingForSceneRest(float dt,
-                                 bool isPrimaryButton,
-                                 bool isSecondaryButton);
+  void updateForLinkAnimation(float dt, ButtonSet buttonSet);
+  void updateIdle(float dt, ButtonSet buttonSet);
+  void updateForHeldObject(float dt, ButtonSet buttonSet);
+  void updateWaitingForSceneRest(float dt, ButtonSet buttonSet);
   int markAndCountActivePhysicsObjects();
+  void endUserAction();
+  void updateCamera(float dt, ButtonSet buttonSet);
 
+  Config config_;
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
   esp::gfx::DebugRender* debugRender_ = nullptr;
   esp::gfx::Debug3DText* debug3dText_ = nullptr;
   Magnum::Vector2i cursor_;
-  std::vector<int> existingObjectIds_;
   int heldObjId_ = -1;
   int recentHeldObjRotIndex_ = 0;
   Corrade::Containers::Optional<LinkAnimation> linkAnimOpt_;
@@ -69,7 +82,9 @@ class Arranger {
   Session session_;
   Corrade::Containers::Optional<UserAction> activeUserAction_;
   float physicsTimestep_ = 0.f;
-  int physicsStepCounter_ = 0;
+  int actionPhysicsStepCounter_ = 0;
+  std::unordered_map<int, bool> linkAnimMemory_;
+  int cameraIndex_ = 0;
 };
 
 }  // namespace arrange
