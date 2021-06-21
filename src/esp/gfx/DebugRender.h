@@ -17,7 +17,7 @@
 #include <Magnum/GL/Mesh.h>
 #include <Magnum/Math/Color.h>
 #include <Magnum/Math/Matrix4.h>
-#include <Magnum/Shaders/VertexColor.h>
+#include <Magnum/Shaders/VertexColorGL.h>
 
 #include <vector>
 namespace esp {
@@ -91,7 +91,7 @@ class DebugRender {
   std::vector<Magnum::Matrix4> _inputTransformStack;
   Magnum::Matrix4 _cachedInputTransform{Magnum::Math::IdentityInit};
   Magnum::Matrix4 _transformationProjectionMatrix{Magnum::Math::IdentityInit};
-  Magnum::Shaders::VertexColor3D _shader;
+  Magnum::Shaders::VertexColorGL3D _shader;
   Magnum::GL::Buffer _buffer;
   Magnum::GL::Mesh _mesh;
   Magnum::Containers::Array<VertexRecord> _bufferData;
