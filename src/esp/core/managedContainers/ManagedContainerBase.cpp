@@ -136,9 +136,6 @@ std::string ManagedContainerBase::getUniqueHandleFromCandidatePerType(
   int incr = 0;
   // default to illegal apple/windows character
   char pivotChar = ':';
-#if __linux__
-  pivotChar = '/';
-#endif
   if (resVals.size() != 0) {
     // handles exist with passed substring.  Find highest handle increment, add
     // 1 and use for new name 1, build new handle
