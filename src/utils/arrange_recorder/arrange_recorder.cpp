@@ -82,7 +82,8 @@ class ArrangeRecorder : public Mn::Platform::Application {
   std::string getActiveSceneSimplifiedName();
   std::string findNewSessionSaveFilepath();
   std::string getActiveScenePhysicsKeyframeFilepath();
-  void checkReloadConfig(float dt);
+  void checkReloadArrangeConfig(float dt);
+  esp::arrange::Config loadArrangeConfig();
 
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
@@ -131,6 +132,7 @@ class ArrangeRecorder : public Mn::Platform::Application {
       physAttrManager_ = nullptr;
 
   bool debugBullet_ = false;
+  bool showImgui_ = true;
 
   esp::scene::SceneNode* agentBodyNode_ = nullptr;
 
@@ -145,7 +147,6 @@ class ArrangeRecorder : public Mn::Platform::Application {
   Mn::Timeline timeline_;
 
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
-  bool showFPS_ = false;
 
   esp::gfx::DebugRender debugRender_;
   esp::gfx::Debug3DText debug3dText_;
@@ -169,9 +170,8 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
         agentConfig.sensorSpecifications.back().get());
 
     spec->uuid = uuid;
-    spec->sensorSubType = args.isSet("orthographic")
-                              ? esp::sensor::SensorSubType::Orthographic
-                              : esp::sensor::SensorSubType::Pinhole;
+    // see also esp::sensor::SensorSubType::Orthographic
+    spec->sensorSubType = esp::sensor::SensorSubType::Pinhole;
     spec->sensorType = sensorType;
     if (sensorType == esp::sensor::SensorType::Depth ||
         sensorType == esp::sensor::SensorType::Semantic) {
@@ -206,13 +206,6 @@ void ArrangeRecorder::createSimulator() {
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
   sceneAttr_ = simulator_->getMetadataMediator()->getSceneAttributesByName(
       simConfig_.activeSceneName);
-
-  // NavMesh customization options
-  if (args.isSet("disable-navmesh")) {
-    if (simulator_->getPathFinder()->isLoaded()) {
-      simulator_->setPathFinder(esp::nav::PathFinder::create());
-    }
-  }
 
   // configure and initialize default Agent and Sensor
   auto agentConfig = esp::agent::AgentConfiguration();
@@ -272,7 +265,9 @@ void ArrangeRecorder::createSimulator() {
       Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
 
   arranger_ = std::make_unique<esp::arrange::Arranger>(
-      simulator_.get(), renderCamera_, &debugRender_, &debug3dText_);
+      loadArrangeConfig(), simulator_.get(), renderCamera_, &debugRender_,
+      &debug3dText_);
+
   restoreFromScenePhysicsKeyframe();
 }
 
@@ -288,28 +283,21 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
               .setColorBufferSize(Mn::Vector4i(8, 8, 8, 8))
               .setSampleCount(4)} {
   Cr::Utility::Arguments args;
-  args.addArgument("scene")
-      .setHelp("scene", "scene/stage file to load")
+  args.addNamedArgument("scene")
+      .setHelp("scene", "Path to your scene (your_scene.scene_instance.json)")
       .addSkippedPrefix("magnum", "engine-specific options")
-      .setGlobalHelp("Rearrange a scene with the mouse")
+      .setGlobalHelp("Rearrange a scene with the mouse and keyboard")
       .addOption("dataset", "default")
-      .setHelp("dataset", "dataset configuration file to use")
-      .addBooleanOption("stage-requires-lighting")
-      .setHelp("stage-requires-lighting",
-               "Stage asset should be lit with Phong shading.")
+      .setHelp(
+          "dataset",
+          "Path to your scene dataset (your_dataset.scene_dataset_config.json")
       .addBooleanOption("debug-bullet")
       .setHelp("debug-bullet", "Render Bullet physics debug wireframes.")
-      .addBooleanOption("orthographic")
-      .setHelp("orthographic",
-               "If specified, use orthographic camera to view scene.")
-      .addBooleanOption("disable-navmesh")
-      .setHelp("disable-navmesh",
-               "Disable the navmesh, disabling agent navigation constraints.")
-      .addBooleanOption("edit-scene-physics-keyframe")
-      .setHelp("edit-scene-physics-keyframe",
+      .addBooleanOption("authoring-mode")
+      .setHelp("authoring-mode",
                "Instead of recording an arrangement session, use the arranger "
-               "to edit the scene's start state. This modifies "
-               "scenes/sceneName.physics_keyframe.json.")
+               "to edit the scene's start state. This is saved to "
+               "your_scene.physics_keyframe.json.")
       .addOption("arrange-config")
       .setHelp("arrange-config", "filepath to arrange config json file")
       .parse(arguments.argc, arguments.argv);
@@ -343,16 +331,14 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
   auto simConfig = esp::sim::SimulatorConfiguration();
   simConfig.activeSceneName = sceneFileName;
   simConfig.sceneDatasetConfigFile = args.value("dataset");
-  LOG(INFO) << "Dataset : " << simConfig.sceneDatasetConfigFile;
   simConfig.enablePhysics = useBullet;
   simConfig.frustumCulling = true;
   simConfig.requiresTextures = true;
   simConfig.enableGfxReplaySave = false;
-  if (args.isSet("stage-requires-lighting")) {
-    Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
-    simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
-    simConfig.overrideSceneLightDefaults = true;
-  }
+
+  // temp hard-code default lighting
+  simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
+  simConfig.overrideSceneLightDefaults = true;
 
   simConfig_ = simConfig;
   args_ = std::move(args);
@@ -375,13 +361,17 @@ void ArrangeRecorder::drawEvent() {
   // Agent actions should occur at a fixed rate per second
   timeSinceLastSimulation += timeline_.previousFrameDuration();
 
+#if 0  // disable movement controls
   // call moveAndLook at 60 Hz
   while (timeSinceLastSimulation >= 1.0 / 60.0) {
     timeSinceLastSimulation -= 1.0 / 60.0;
     moveAndLook(1);
   }
+#endif
 
-  checkReloadConfig(timeline_.previousFrameDuration());
+  if (args_.isSet("authoring-mode")) {
+    checkReloadArrangeConfig(timeline_.previousFrameDuration());
+  }
 
   arranger_->setCursor(recentCursorPos_);
   arranger_->update(timeline_.previousFrameDuration(),
@@ -444,12 +434,24 @@ void ArrangeRecorder::drawEvent() {
     debug3dText_.flushToImGui(projM * camM, viewportSize);
   }
 
-  if (showFPS_) {
+  if (showImgui_) {
     ImGui::SetNextWindowPos(ImVec2(5, 5));
-    ImGui::Begin("main", NULL,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-                     ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::SetWindowFontScale(1.0);
+    static float bgAlpha = 0.3;
+    ImGui::SetNextWindowBgAlpha(bgAlpha);
+    ImGui::Begin(
+        "main", NULL,
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::SetWindowFontScale(1.5);
+    if (args_.isSet("authoring-mode")) {
+      ImGui::Text("Save Scene: CTRL+S");
+    }
+    ImGui::Text("Rotate/Skip: F");
+    ImGui::Text("Raise/Lower: Z, X");
+    ImGui::Text("Undo/Cancel: CTRL+Z");
+    ImGui::Text("Camera: C, V");
+    ImGui::Text("Zoom: mouse-wheel");
+    ImGui::Text("Reset: F5");
+    ImGui::Text("Hide Help: H");
     ImGui::Text("%.1f FPS", Mn::Double(ImGui::GetIO().Framerate));
     ImGui::End();
   }
@@ -555,7 +557,6 @@ void ArrangeRecorder::mousePressEvent(MouseEvent& event) {
   }
 
   event.setAccepted();
-  redraw();
 }
 
 void ArrangeRecorder::mouseReleaseEvent(MouseEvent& event) {
@@ -576,28 +577,12 @@ void ArrangeRecorder::mouseScrollEvent(MouseScrollEvent& event) {
   float mod = scrollModVal > 0 ? modVal : 1.0 / modVal;
   auto& cam = getAgentCamera();
   cam.modifyZoom(mod);
-  redraw();
 
   event.setAccepted();
 }  // ArrangeRecorder::mouseScrollEvent
 
 void ArrangeRecorder::mouseMoveEvent(MouseMoveEvent& event) {
   recentCursorPos_ = event.position();
-
-  if ((event.buttons() & MouseMoveEvent::Button::Right)) {
-    const Mn::Vector2i delta = event.relativePosition();
-    auto& controls = *defaultAgent_->getControls().get();
-    controls(*agentBodyNode_, "turnRight", delta.x());
-    // apply the transformation to all sensors
-    for (auto& p : agentBodyNode_->getSubtreeSensors()) {
-      controls(p.second.get().object(),  // SceneNode
-               "lookDown",               // action name
-               delta.y(),                // amount
-               false);                   // applyFilter
-    }
-  }
-
-  redraw();
 
   event.setAccepted();
 }
@@ -610,25 +595,35 @@ void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
     } break;
     case KeyEvent::Key::S: {
       if (event.modifiers() & KeyEvent::Modifier::Ctrl) {
-        if (args_.isSet("edit-scene-physics-keyframe")) {
+        if (args_.isSet("authoring-mode")) {
           saveScenePhysicsKeyframe();
         } else {
-          LOG(WARNING) << "Use --edit-scene-physics-keyframe to enable "
-                          "editing/saving the scene physics-keyframe.";
+          LOG(WARNING) << "Use --authoring-mode to enable "
+                          "saving the scene physics-keyframe.";
         }
       }
     } break;
     case KeyEvent::Key::F:
       arranger_->update(0.f, esp::arrange::Arranger::Button::Secondary);
       break;
-    case KeyEvent::Key::X:
+    case KeyEvent::Key::C:
       arranger_->update(0.f, esp::arrange::Arranger::Button::PrevCamera);
       break;
-    case KeyEvent::Key::C:
+    case KeyEvent::Key::V:
       arranger_->update(0.f, esp::arrange::Arranger::Button::NextCamera);
       break;
-    case KeyEvent::Key::V:
-      showFPS_ = !showFPS_;
+    case KeyEvent::Key::Z: {
+      if (event.modifiers() & KeyEvent::Modifier::Ctrl) {
+        arranger_->update(0.f, esp::arrange::Arranger::Button::Undo);
+      } else {
+        arranger_->update(0.f, esp::arrange::Arranger::Button::Raise);
+      }
+    } break;
+    case KeyEvent::Key::X:
+      arranger_->update(0.f, esp::arrange::Arranger::Button::Lower);
+      break;
+    case KeyEvent::Key::H:
+      showImgui_ = !showImgui_;
       break;
     case KeyEvent::Key::Esc:
       /* Using Application::exit(), which exits at the next iteration of the
@@ -707,7 +702,8 @@ void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
 
   arranger_.reset();
   arranger_ = std::make_unique<esp::arrange::Arranger>(
-      simulator_.get(), renderCamera_, &debugRender_, &debug3dText_);
+      loadArrangeConfig(), simulator_.get(), renderCamera_, &debugRender_,
+      &debug3dText_);
   numSavedArrangerUserActions_ = 0;
   sessionSaveFilepath_ = "";
 }
@@ -736,7 +732,7 @@ std::string ArrangeRecorder::findNewSessionSaveFilepath() {
 void ArrangeRecorder::checkSaveArrangerSession() {
   const auto& session = arranger_->getSession();
 
-  if (args_.isSet("edit-scene-physics-keyframe")) {
+  if (args_.isSet("authoring-mode")) {
     return;
   }
 
@@ -764,42 +760,50 @@ void ArrangeRecorder::checkSaveArrangerSession() {
 }
 
 // hot-reload arrange config json every n seconds
-void ArrangeRecorder::checkReloadConfig(float dt) {
+void ArrangeRecorder::checkReloadArrangeConfig(float dt) {
   constexpr float reloadPeriod = 1.f;
   static float elapsed = reloadPeriod;
   elapsed += dt;
   if (elapsed >= reloadPeriod) {
     elapsed -= reloadPeriod;
 
-    const std::string filepath = args_.value("arrange-config");
-    if (filepath.empty()) {
-      return;
-    }
-
-    if (!Corrade::Utility::Directory::exists(filepath)) {
-      LOG(WARNING) << "ArrangeRecorder::checkReloadConfig: writing a new empty "
-                      "arrange config at "
-                   << filepath;
-      esp::arrange::Config config;
-      config.cameras.push_back(esp::arrange::ConfigCamera());
-      rapidjson::Document d(rapidjson::kObjectType);
-      rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
-      esp::io::addMember(d, "config", config, allocator);
-      esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ true,
-                               /*maxDecimalPlaces*/ 5);
-    }
-
-    try {
-      auto newDoc = esp::io::parseJsonFile(filepath);
-      esp::arrange::Config config;
-      esp::io::readMember(newDoc, "config", config);
-      arranger_->setConfig(config);
-    } catch (...) {
-      LOG(ERROR) << "ArrangeRecorder::checkReloadConfig: failed to parse "
-                    "arrange config from "
-                 << filepath;
-    }
+    arranger_->setConfig(loadArrangeConfig());
   }
+}
+
+esp::arrange::Config ArrangeRecorder::loadArrangeConfig() {
+  esp::arrange::Config config;
+
+  const std::string filepath = args_.value("arrange-config");
+  if (filepath.empty()) {
+    return config;
+  }
+
+  if (!Corrade::Utility::Directory::exists(filepath)) {
+    LOG(WARNING)
+        << "ArrangeRecorder::checkReloadArrangeConfig: writing a new empty "
+           "arrange config at "
+        << filepath;
+    config.cameras.push_back(esp::arrange::ConfigCamera());
+    rapidjson::Document d(rapidjson::kObjectType);
+    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+    esp::io::addMember(d, "config", config, allocator);
+    esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ true,
+                             /*maxDecimalPlaces*/ 5);
+    return config;
+  }
+
+  try {
+    auto newDoc = esp::io::parseJsonFile(filepath);
+    esp::io::readMember(newDoc, "config", config);
+
+  } catch (...) {
+    LOG(ERROR) << "ArrangeRecorder::checkReloadArrangeConfig: failed to parse "
+                  "arrange config from "
+               << filepath;
+  }
+
+  return config;
 }
 
 }  // namespace

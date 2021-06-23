@@ -25,12 +25,15 @@ class Arranger {
     Secondary = 1 << 1,
     Undo = 1 << 2,
     NextCamera = 1 << 3,
-    PrevCamera = 1 << 4
+    PrevCamera = 1 << 4,
+    Raise = 1 << 5,
+    Lower = 1 << 6,
   };
 
   typedef Corrade::Containers::EnumSet<Button> ButtonSet;
 
-  Arranger(esp::sim::Simulator* simulator,
+  Arranger(Config&& config,
+           esp::sim::Simulator* simulator,
            esp::gfx::RenderCamera* renderCamera,
            esp::gfx::DebugRender* debugRender,
            esp::gfx::Debug3DText* debug3dText);
@@ -53,7 +56,6 @@ class Arranger {
     float startPos = -1.f;
     float endPos = -1.f;
     float animTimer = 0.f;
-    float animDuration = -1.f;
   };
 
   int getNumRotationIndices();
@@ -66,6 +68,9 @@ class Arranger {
   int markAndCountActivePhysicsObjects();
   void endUserAction();
   void updateCamera(float dt, ButtonSet buttonSet);
+  void visualizeHeldObject(const Magnum::Vector3& pickerHitPos,
+                           bool foundPreviewPos,
+                           const Magnum::Vector3& previewPos);
 
   Config config_;
   esp::sim::Simulator* simulator_ = nullptr;
@@ -85,6 +90,7 @@ class Arranger {
   int actionPhysicsStepCounter_ = 0;
   std::unordered_map<int, bool> linkAnimMemory_;
   int cameraIndex_ = 0;
+  float dropOffsetY_ = 0.f;
 };
 
 }  // namespace arrange
