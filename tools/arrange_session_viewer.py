@@ -50,10 +50,12 @@ def session_viewer(args):
         assert "session" in json_root
         session = json_root["session"]
 
+    dataset_filepath = session["dataset"]
     scene_filepath = session["scene"]
+    print("dataset: " + dataset_filepath)
     print("scene: " + scene_filepath)
 
-    cfg = make_configuration(args.dataset, scene_filepath)
+    cfg = make_configuration(dataset_filepath, scene_filepath)
 
     sim = habitat_sim.Simulator(cfg)
 
@@ -63,13 +65,19 @@ def session_viewer(args):
     agent_node = sim.get_agent(0).body.object
     sensor_node = sim._sensors["rgba_camera"]._sensor_object.object
 
-    # initial agent transform
-    agent_node.translation = mn.Vector3(-0.045473, 0.0, -0.418929)
-    agent_node.rotation = mn.Quaternion(mn.Vector3(0, -0.256289, 0), 0.9666)
+    # place agent at origin (we will never move the agent; we will only move the sensor)
+    agent_node.translation = [0.0, 0.0, 0.0]
+    agent_node.rotation = mn.Quaternion()
 
-    # initial sensor local transform (relative to agent)
-    sensor_node.translation = mn.Vector3(-0.045473, 0, -0.418929)
-    sensor_node.rotation = mn.Quaternion(mn.Vector3(-0.271441, 0, 0), 0.962455)
+    if session["defaultCamera"]:
+        cam_transform = session["defaultCamera"]
+        sensor_node.translation = mn.Vector3(cam_transform["translation"])
+        sensor_node.rotation = make_quaternion(cam_transform["rotation"])
+
+    else:
+        print("warning: no defaultCamera in session")
+        sensor_node.translation = mn.Vector3(0.0, 0.0, 0.0)
+        sensor_node.rotation = mn.Quaternion()
 
     keyframes = session["keyframes"]
     assert keyframes
@@ -154,7 +162,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-show-video", dest="show_video", action="store_false")
     parser.add_argument("--no-make-video", dest="make_video", action="store_false")
-    parser.add_argument("--dataset")
     parser.add_argument("--session")
     parser.add_argument("--output-folder")
     parser.set_defaults(show_video=True, make_video=True)
