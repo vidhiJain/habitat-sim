@@ -8,8 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "esp/gfx/replay/Keyframe.h"  // for Transform
 #include "esp/io/JsonAllTypes.h"
 #include "esp/physics/PhysicsKeyframe.h"
+
+#include "Config.h"
 
 namespace esp {
 namespace arrange {
@@ -24,7 +27,12 @@ struct UserAction {
 };
 
 struct Session {
+  std::string dataset;
   std::string scene;
+  float physicsTimeStep = 0.f;
+  // an optional static camera that provides a reasonabe view of the session
+  Corrade::Containers::Optional<esp::gfx::replay::Transform> defaultCamera;
+  Config config;
   std::vector<UserAction> userActions;
   std::vector<esp::physics::PhysicsKeyframe> keyframes;
 };

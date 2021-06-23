@@ -44,7 +44,12 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, UserAction& x) {
 
 /*
 struct Session {
+  std::string dataset;
   std::string scene;
+  Config config;
+  float physicsTimeStep = 0.f;
+  // an optional static camera that provides a reasonabe view of the session
+  Corrade::Containers::Optional<ConfigCamera> defaultCamera;
   std::vector<UserAction> userActions;
   std::vector<esp::physics::PhysicsKeyframe> keyframes;
 };
@@ -53,14 +58,22 @@ struct Session {
 esp::io::JsonGenericValue toJsonValue(const Session& x,
                                       esp::io::JsonAllocator& allocator) {
   esp::io::JsonGenericValue obj(rapidjson::kObjectType);
+  esp::io::addMember(obj, "dataset", x.dataset, allocator);
   esp::io::addMember(obj, "scene", x.scene, allocator);
+  esp::io::addMember(obj, "physicsTimeStep", x.physicsTimeStep, allocator);
+  esp::io::addMember(obj, "defaultCamera", x.defaultCamera, allocator);
+  esp::io::addMember(obj, "config", x.config, allocator);
   esp::io::addMember(obj, "userActions", x.userActions, allocator);
   esp::io::addMember(obj, "keyframes", x.keyframes, allocator);
   return obj;
 }
 
 bool fromJsonValue(const esp::io::JsonGenericValue& obj, Session& x) {
+  esp::io::readMember(obj, "dataset", x.dataset);
   esp::io::readMember(obj, "scene", x.scene);
+  esp::io::readMember(obj, "physicsTimeStep", x.physicsTimeStep);
+  esp::io::readMember(obj, "defaultCamera", x.defaultCamera);
+  esp::io::readMember(obj, "config", x.config);
   esp::io::readMember(obj, "userActions", x.userActions);
   esp::io::readMember(obj, "keyframes", x.keyframes);
   return true;
