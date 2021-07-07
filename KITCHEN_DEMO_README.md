@@ -1,5 +1,7 @@
 # Kitchen Demo
 
+![kitchen_sim](https://user-images.githubusercontent.com/6557808/124810163-da9d9600-df15-11eb-9deb-1341ddf293af.png)
+
 ## Overview
 
 The Kitchen Demo is a prototype implemented as some new C++ classes plus some changes to viewer.cpp (our C++ interactive viewer). Much of the code here is hacky and not intended for long-term use.
