@@ -124,9 +124,13 @@ int BulletPhysicsManager::addArticulatedObjectFromURDF(
     float massScale,
     bool forceReload,
     const std::string& lightSetup) {
-  ESP_CHECK(
-      urdfImporter_->loadURDF(filepath, globalScale, massScale, forceReload),
-      "failed to parse/load URDF file " << filepath);
+  urdfImporter_->logMessages = true;
+  if (!urdfImporter_->loadURDF(filepath, globalScale, massScale, forceReload)) {
+    LOG(ERROR)
+        << "BulletPhysicsManager::addArticulatedObjectFromURDF: failed to load "
+        << filepath;
+    return ID_UNDEFINED;
+  }
 
   int articulatedObjectID = allocateObjectID();
 

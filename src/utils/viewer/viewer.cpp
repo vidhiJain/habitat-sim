@@ -1340,8 +1340,8 @@ void Viewer::drawEvent() {
   profiler_.endFrame();
 
   imgui_.newFrame();
-  ImGui::SetNextWindowPos(ImVec2(10, 10));
   if (showFPS_) {
+    ImGui::SetNextWindowPos(ImVec2(10, 10));
     ImGui::Begin("main", NULL,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
                      ImGuiWindowFlags_AlwaysAutoResize);
@@ -1373,11 +1373,11 @@ void Viewer::drawEvent() {
         break;
     }
     ImGui::Text("%s", profiler_.statistics().c_str());
+    std::string modeText =
+        "Mouse Ineraction Mode: " + mouseModeNames.at(mouseInteractionMode);
+    ImGui::Text("%s", modeText.c_str());
+    ImGui::End();
   }
-  std::string modeText =
-      "Mouse Ineraction Mode: " + mouseModeNames.at(mouseInteractionMode);
-  ImGui::Text("%s", modeText.c_str());
-  ImGui::End();
 
   /* Set appropriate states. If you only draw ImGui, it is sufficient to
      just enable blending and scissor test in the constructor. */
@@ -1887,7 +1887,8 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       break;
     case KeyEvent::Key::T: {
       // add an ArticulatedObject from provided filepath
-      Mn::Debug{} << "Load URDF: provide a URDF filepath.";
+      Mn::Debug{}
+          << "Load URDF: type/paste a URDF filepath here in this console: ";
       std::string urdfFilepath;
       std::cin >> urdfFilepath;
 
@@ -1895,13 +1896,20 @@ void Viewer::keyPressEvent(KeyEvent& event) {
         Mn::Debug{} << "... no input provided. Aborting.";
       } else if (!Cr::Utility::String::endsWith(urdfFilepath, ".urdf") &&
                  !Cr::Utility::String::endsWith(urdfFilepath, ".URDF")) {
-        Mn::Debug{} << "... input is not a URDF. Aborting.";
+        Mn::Debug{} << "... input \"" << urdfFilepath
+                    << "\" is not a URDF. Aborting.";
       } else if (Cr::Utility::Directory::exists(urdfFilepath)) {
         auto aom = simulator_->getArticulatedObjectManager();
-        auto ao = aom->addArticulatedObjectFromURDF(urdfFilepath);
-        ao->setTranslation(
-            defaultAgent_->node().transformation().transformPoint(
-                {0, 1.0, -1.5}));
+        auto ao = aom->addArticulatedObjectFromURDF(urdfFilepath,
+                                                    /*bool fixedBase =*/false,
+                                                    /*float globalScale =*/1.0,
+                                                    /*float massScale =*/1.0,
+                                                    /*bool forceReload =*/true);
+        if (ao) {
+          ao->setTranslation(
+              defaultAgent_->node().transformation().transformPoint(
+                  {0, 1.0, -1.5}));
+        }
       }
     } break;
     case KeyEvent::Key::L: {
