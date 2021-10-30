@@ -423,7 +423,7 @@ void main() {
 
     vec3 groundLight = vec3(1.0, 0.95, 0.9) * 0.3;
     vec3 skyLight = vec3(1.0, 1.0, 1.0) * 0.6;
-    finalColor += baseColor.rgb * mix(groundLight, skyLight, (dot(normal, light) + 1.0) * 0.5);
+    diffuseContrib += baseColor.rgb * mix(groundLight, skyLight, (dot(normal, light) + 1.0) * 0.5);
   }
 
   // TODO: use ALPHA_MASK to discard fragments

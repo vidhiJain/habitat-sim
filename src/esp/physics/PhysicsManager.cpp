@@ -632,7 +632,7 @@ PhysicsKeyframe PhysicsManager::saveKeyframe() {
 void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
                                          bool activate) {
   if (keyframe.articulatedObjects.empty() && keyframe.rigidObjects.empty()) {
-    LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: empty keyframe";
+    ESP_WARNING() << "PhysicsManager::restoreFromKeyframe: empty keyframe";
     return;
   }
 
@@ -647,9 +647,9 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
 
       found = true;
       if (artObj->getMotionType() == esp::physics::MotionType::STATIC) {
-        LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: art obj "
-                   << keyframeArtObj.name
-                   << " has MotionType::STATIC and can't be restored.";
+        ESP_ERROR() << "PhysicsManager::restoreFromKeyframe: art obj "
+                    << keyframeArtObj.name
+                    << " has MotionType::STATIC and can't be restored.";
         break;
       }
 
@@ -669,9 +669,9 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
       break;
     }
     if (!found) {
-      LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no art obj in "
-                      "scene with name "
-                   << keyframeArtObj.name;
+      ESP_WARNING() << "PhysicsManager::restoreFromKeyframe: no art obj in "
+                       "scene with name "
+                    << keyframeArtObj.name;
     }
   }
 
@@ -685,9 +685,9 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
 
       found = true;
       if (rigidObj->getMotionType() == esp::physics::MotionType::STATIC) {
-        LOG(ERROR) << "PhysicsManager::restoreFromKeyframe: rigid obj "
-                   << keyframeRigidObj.name
-                   << " has MotionType::STATIC and can't be restored.";
+        ESP_ERROR() << "PhysicsManager::restoreFromKeyframe: rigid obj "
+                    << keyframeRigidObj.name
+                    << " has MotionType::STATIC and can't be restored.";
         break;
       }
 
@@ -702,9 +702,9 @@ void PhysicsManager::restoreFromKeyframe(const PhysicsKeyframe& keyframe,
       break;
     }
     if (!found) {
-      LOG(WARNING) << "PhysicsManager::restoreFromKeyframe: no rigid obj in "
-                      "scene with name "
-                   << keyframeRigidObj.name;
+      ESP_WARNING() << "PhysicsManager::restoreFromKeyframe: no rigid obj in "
+                       "scene with name "
+                    << keyframeRigidObj.name;
     }
   }
 }

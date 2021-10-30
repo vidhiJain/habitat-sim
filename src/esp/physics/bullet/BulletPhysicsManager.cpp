@@ -547,7 +547,7 @@ RaycastResults BulletPhysicsManager::castSphere(const esp::geo::Ray& ray,
   results.ray = ray;
   double rayLength = static_cast<double>(ray.direction.length());
   if (rayLength == 0) {
-    LOG(ERROR)
+    ESP_ERROR()
         << "::castSphere : Cannot cast sphere with zero length, aborting. ";
     return results;
   }
