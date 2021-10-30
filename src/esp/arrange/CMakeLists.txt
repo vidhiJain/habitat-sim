@@ -10,5 +10,5 @@ add_library(
 
 target_link_libraries(
   arrange
-  PUBLIC core glog gfx
+  PUBLIC core gfx
 )

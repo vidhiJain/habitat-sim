@@ -108,8 +108,8 @@ Arranger::Arranger(Config&& config,
   activeUserAction_->startFrame = session_.keyframes.size() - 1;
   waitingForSceneRest_ = true;
   restStartPhysicsStepCount_ = actionPhysicsStepCounter_;
-  LOG(INFO) << "Starting \"settling\" user action on frame "
-            << activeUserAction_->startFrame;
+  ESP_DEBUG() << "Starting \"settling\" user action on frame "
+              << activeUserAction_->startFrame;
 
   if (isHeadless_) {
     waitForRest();
@@ -180,7 +180,8 @@ void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
                           baseVelMag * linkAnim.animTimer /
                               (animFraction + config_.link.divisionEps));
   velMag *= (std::min(linkAnim.animTimer / config_.link.rampUpTime, 1.f));
-  // LOG(INFO) << "animTimer: " << linkAnim.animTimer << ", velMag: " << velMag;
+  // ESP_DEBUG() << "animTimer: " << linkAnim.animTimer << ", velMag: " <<
+  // velMag;
 
   // snap to zero vel if near end pos (anim is finished)
   float vel = isNearEndPos ? 0.0f : forceDir * velMag;
@@ -227,9 +228,9 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
       // sleep
       simulator_->stepWorld(-1);
 
-      LOG(INFO) << "Undoing user action " << session_.userActions.size()
-                << " and restoring to keyframe "
-                << session_.keyframes.size() - 1;
+      ESP_DEBUG() << "Undoing user action " << session_.userActions.size()
+                  << " and restoring to keyframe "
+                  << session_.keyframes.size() - 1;
     }
   }
 
@@ -361,7 +362,7 @@ void Arranger::cancelHeldObject() {
   simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
                                          /*activate*/ false);
   actionPhysicsStepCounter_ = 0;
-  LOG(INFO) << "Canceling user action " << session_.userActions.size();
+  ESP_DEBUG() << "Canceling user action " << session_.userActions.size();
 }
 
 void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
@@ -503,8 +504,8 @@ void Arranger::endUserAction() {
 
   CORRADE_INTERNAL_ASSERT(activeUserAction_);
   activeUserAction_->endFrame = session_.keyframes.size() - 1;
-  LOG(INFO) << "Ending user action " << session_.userActions.size()
-            << " on frame " << activeUserAction_->endFrame;
+  ESP_DEBUG() << "Ending user action " << session_.userActions.size()
+              << " on frame " << activeUserAction_->endFrame;
   session_.userActions.emplace_back(std::move(*activeUserAction_));
   activeUserAction_ = Cr::Containers::NullOpt;
 
@@ -615,7 +616,7 @@ void Arranger::updatePhysicsWorld(float dt) {
   elapsedTime += dt;
   if (stepCounter % 10 == 9) {
     float stepRate = stepCounter / elapsedTime;
-    LOG(INFO) << "stepRate: " << stepRate;
+    ESP_DEBUG() << "stepRate: " << stepRate;
   }
 #endif
 }
@@ -702,9 +703,10 @@ void Arranger::startMoveRigidObject(int rigidObjId, int rotIndex) {
   actionPhysicsStepCounter_ = 0;
 
   activeUserAction_->startFrame = session_.keyframes.size() - 1;
-  LOG(INFO) << "Starting user action " << session_.userActions.size()
-            << " on frame " << activeUserAction_->startFrame
-            << " with rigidObj " << activeUserAction_->rigidObj;
+  ESP_DEBUG() << "Starting user action " << Corrade::Utility::Debug::nospace
+              << session_.userActions.size() << " on frame "
+              << activeUserAction_->startFrame << " with rigidObj "
+              << activeUserAction_->rigidObj;
 }
 
 bool Arranger::moveArticulatedLink(int artObjId,
@@ -823,10 +825,10 @@ bool Arranger::startMoveArticulatedLink(int artObjId,
   actionPhysicsStepCounter_ = 0;
 
   activeUserAction_->startFrame = session_.keyframes.size() - 1;
-  LOG(INFO) << "Starting user action " << session_.userActions.size()
-            << " on frame " << activeUserAction_->startFrame
-            << " with articulatedObj " << activeUserAction_->articulatedObj
-            << " link " << activeUserAction_->articulatedLink;
+  ESP_DEBUG() << "Starting user action " << session_.userActions.size()
+              << " on frame " << activeUserAction_->startFrame
+              << " with articulatedObj " << activeUserAction_->articulatedObj
+              << " link " << activeUserAction_->articulatedLink;
   return true;
 }
 

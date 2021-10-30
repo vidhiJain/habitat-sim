@@ -7,7 +7,7 @@
 
 #include <unordered_map>
 
-#include "esp/core/random.h"
+#include "esp/core/Random.h"
 #include "esp/gfx/Debug3DText.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"

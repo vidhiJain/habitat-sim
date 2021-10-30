@@ -20,12 +20,10 @@
 #include <Magnum/ImGuiIntegration/Context.hpp>
 
 #include "esp/arrange/Arranger.h"
-#include "esp/core/configure.h"
-#include "esp/core/esp.h"
+#include "esp/core/Esp.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
-#include "esp/physics/configure.h"
 #include "esp/scene/SceneNode.h"
 #include "esp/sensor/CameraSensor.h"
 #include "esp/sim/Simulator.h"
@@ -37,6 +35,8 @@ constexpr float rgbSensorHeight = 1.5f;
 // for ease of access
 namespace Cr = Corrade;
 namespace Mn = Magnum;
+
+esp::logging::LoggingContext loggingContext_;
 
 namespace {
 
@@ -109,7 +109,7 @@ class ArrangeRecorder : public Mn::Platform::Application {
 
     auto str = strDat.str();
     if (str.size() > 0) {
-      LOG(INFO) << str;
+      ESP_DEBUG() << str;
     }
   }
 
@@ -337,7 +337,7 @@ ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
   simConfig.enableGfxReplaySave = false;
 
   // temp hard-code default lighting
-  simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
+  simConfig.sceneLightSetupKey = esp::DEFAULT_LIGHTING_KEY;
   simConfig.overrideSceneLightDefaults = true;
 
   simConfig_ = simConfig;
@@ -598,8 +598,8 @@ void ArrangeRecorder::keyPressEvent(KeyEvent& event) {
         if (args_.isSet("authoring-mode")) {
           saveScenePhysicsKeyframe();
         } else {
-          LOG(WARNING) << "Use --authoring-mode to enable "
-                          "saving the scene physics-keyframe.";
+          ESP_WARNING() << "Use --authoring-mode to enable "
+                           "saving the scene physics-keyframe.";
         }
       }
     } break;
@@ -674,15 +674,15 @@ void ArrangeRecorder::saveScenePhysicsKeyframe() {
   esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ true,
                            /*maxDecimalPlaces*/ 7);
 
-  LOG(INFO) << "Saved new scene start state at " << filepath;
+  ESP_DEBUG() << "Saved new scene start state at " << filepath;
 }
 
 void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
   const auto filepath = getActiveScenePhysicsKeyframeFilepath();
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(ERROR) << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: file "
-               << filepath << " not found.";
+    ESP_ERROR() << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: file "
+                << filepath << " not found.";
     return;
   }
   try {
@@ -691,14 +691,14 @@ void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
     esp::io::readMember(newDoc, "keyframe", keyframe);
     simulator_->restoreFromPhysicsKeyframe(keyframe, /*activate*/ false);
   } catch (...) {
-    LOG(ERROR)
+    ESP_ERROR()
         << "ArrangeRecorder::restoreFromScenePhysicsKeyframe: failed to parse "
            "keyframes from "
         << filepath << ".";
   }
 
-  LOG(INFO) << "Reloaded scene start state from " << filepath
-            << " and started new session";
+  ESP_DEBUG() << "Reloaded scene start state from " << filepath
+              << " and started new session";
 
   arranger_.reset();
   arranger_ = std::make_unique<esp::arrange::Arranger>(
@@ -714,8 +714,8 @@ std::string ArrangeRecorder::getActiveSceneSimplifiedName() {
 
 std::string ArrangeRecorder::findNewSessionSaveFilepath() {
   if (!Cr::Utility::Directory::exists("data")) {
-    LOG(ERROR) << "Data folder not found in working directory! Session saving "
-                  "is disabled.";
+    ESP_ERROR() << "Data folder not found in working directory! Session saving "
+                   "is disabled.";
     return "";
   }
 
@@ -753,7 +753,7 @@ void ArrangeRecorder::checkSaveArrangerSession() {
     // avoid pretty writer, to reduce filesize
     esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ false,
                              /*maxDecimalPlaces*/ 7);
-    LOG(INFO) << "Session saved to " << filepath;
+    ESP_DEBUG() << "Session saved to " << filepath;
 
     numSavedArrangerUserActions_ = session.userActions.size();
   }
@@ -780,7 +780,7 @@ esp::arrange::Config ArrangeRecorder::loadArrangeConfig() {
   }
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(WARNING)
+    ESP_WARNING()
         << "ArrangeRecorder::checkReloadArrangeConfig: writing a new empty "
            "arrange config at "
         << filepath;
@@ -798,9 +798,9 @@ esp::arrange::Config ArrangeRecorder::loadArrangeConfig() {
     esp::io::readMember(newDoc, "config", config);
 
   } catch (...) {
-    LOG(ERROR) << "ArrangeRecorder::checkReloadArrangeConfig: failed to parse "
-                  "arrange config from "
-               << filepath;
+    ESP_ERROR() << "ArrangeRecorder::checkReloadArrangeConfig: failed to parse "
+                   "arrange config from "
+                << filepath;
   }
 
   return config;

@@ -6,13 +6,15 @@
 #include <Corrade/Utility/Assert.h>
 
 #include "esp/arrange/Arranger.h"
-#include "esp/core/esp.h"
-#include "esp/core/random.h"
+#include "esp/core/Esp.h"
+#include "esp/core/Random.h"
 #include "esp/sim/Simulator.h"
 
 // for ease of access
 namespace Cr = Corrade;
 namespace Mn = Magnum;
+
+esp::logging::LoggingContext loggingContext_;
 
 namespace {
 
@@ -155,10 +157,10 @@ BatchArrange::BatchArrange(int argc, char** argv) : random_(0) {
   simConfig.frustumCulling = true;
   simConfig.requiresTextures = true;
   simConfig.enableGfxReplaySave = false;
-  // simConfig.createRenderer = false;
+  simConfig.createRenderer = false;
 
   // temp hard-code default lighting
-  simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
+  simConfig.sceneLightSetupKey = esp::DEFAULT_LIGHTING_KEY;
   simConfig.overrideSceneLightDefaults = true;
 
   simConfig_ = simConfig;
@@ -186,8 +188,8 @@ void BatchArrange::restoreFromScenePhysicsKeyframe() {
   const auto filepath = getActiveScenePhysicsKeyframeFilepath();
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(ERROR) << "BatchArrange::restoreFromScenePhysicsKeyframe: file "
-               << filepath << " not found.";
+    ESP_ERROR() << "BatchArrange::restoreFromScenePhysicsKeyframe: file "
+                << filepath << " not found.";
     return;
   }
   try {
@@ -196,14 +198,14 @@ void BatchArrange::restoreFromScenePhysicsKeyframe() {
     esp::io::readMember(newDoc, "keyframe", keyframe);
     simulator_->restoreFromPhysicsKeyframe(keyframe, /*activate*/ false);
   } catch (...) {
-    LOG(ERROR)
+    ESP_ERROR()
         << "BatchArrange::restoreFromScenePhysicsKeyframe: failed to parse "
            "keyframes from "
         << filepath << ".";
   }
 
-  LOG(INFO) << "Reloaded scene start state from " << filepath
-            << " and started new session";
+  ESP_DEBUG() << "Reloaded scene start state from " << filepath
+              << " and started new session";
 
   if (arranger_) {
     arranger_.reset();
@@ -221,8 +223,8 @@ std::string BatchArrange::getActiveSceneSimplifiedName() {
 
 std::string BatchArrange::findNewSessionSaveFilepath() {
   if (!Cr::Utility::Directory::exists("data")) {
-    LOG(ERROR) << "Data folder not found in working directory! Session saving "
-                  "is disabled.";
+    ESP_ERROR() << "Data folder not found in working directory! Session saving "
+                   "is disabled.";
     return "";
   }
 
@@ -257,7 +259,7 @@ void BatchArrange::checkSaveArrangerSession() {
     // avoid pretty writer, to reduce filesize
     esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ false,
                              /*maxDecimalPlaces*/ 7);
-    LOG(INFO) << "Session saved to " << filepath;
+    ESP_DEBUG() << "Session saved to " << filepath;
 
     numSavedArrangerUserActions_ = session.userActions.size();
   }
@@ -272,7 +274,7 @@ esp::arrange::Config BatchArrange::loadArrangeConfig() {
   }
 
   if (!Corrade::Utility::Directory::exists(filepath)) {
-    LOG(WARNING)
+    ESP_WARNING()
         << "BatchArrange::checkReloadArrangeConfig: writing a new empty "
            "arrange config at "
         << filepath;
@@ -290,9 +292,9 @@ esp::arrange::Config BatchArrange::loadArrangeConfig() {
     esp::io::readMember(newDoc, "config", config);
 
   } catch (...) {
-    LOG(ERROR) << "BatchArrange::checkReloadArrangeConfig: failed to parse "
-                  "arrange config from "
-               << filepath;
+    ESP_ERROR() << "BatchArrange::checkReloadArrangeConfig: failed to parse "
+                   "arrange config from "
+                << filepath;
   }
 
   return config;
