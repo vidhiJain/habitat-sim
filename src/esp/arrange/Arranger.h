@@ -7,6 +7,7 @@
 
 #include <unordered_map>
 
+#include "esp/core/random.h"
 #include "esp/gfx/Debug3DText.h"
 #include "esp/gfx/DebugRender.h"
 #include "esp/gfx/RenderCamera.h"
@@ -32,6 +33,8 @@ class Arranger {
 
   typedef Corrade::Containers::EnumSet<Button> ButtonSet;
 
+  // for headless usage, pass nullptr for renderCamera, debugRender, and
+  // debug3dText
   Arranger(Config&& config,
            esp::sim::Simulator* simulator,
            esp::gfx::RenderCamera* renderCamera,
@@ -48,6 +51,15 @@ class Arranger {
 
   void setConfig(const Config& config) { config_ = config; }
 
+  // headless API
+  bool tryMoveRigidObject(int rigidObjId,
+                          int rotIndex,
+                          const Mn::Vector3& targetPos,
+                          float dropOffsetY);
+  bool moveArticulatedLink(int artObjId, int linkId, bool moveToLowerLimit);
+
+  int getNumRotationIndices() const;
+
  private:
   struct LinkAnimation {
     int artObjId = -1;
@@ -58,7 +70,6 @@ class Arranger {
     float animTimer = 0.f;
   };
 
-  int getNumRotationIndices();
   Mn::Quaternion getRotationByIndex(int index);
   void updatePhysicsWorld(float dt);
   void updateForLinkAnimation(float dt, ButtonSet buttonSet);
@@ -67,12 +78,21 @@ class Arranger {
   void updateWaitingForSceneRest(float dt, ButtonSet buttonSet);
   int markAndCountActivePhysicsObjects();
   void endUserAction();
-  void updateCamera(float dt, ButtonSet buttonSet);
+  Mn::Matrix4 updateCamera(float dt, ButtonSet buttonSet);
   void visualizeHeldObject(const Magnum::Vector3& pickerHitPos,
-                           bool foundPreviewPos,
-                           const Magnum::Vector3& previewPos);
+                           bool foundPreviewPos);
+  bool shouldMoveLinkToLowerLimit(int artObjId, int linkId);
+  bool startMoveArticulatedLink(int artObjId,
+                                int linkId,
+                                bool moveToLowerLimit);
+  void startMoveRigidObject(int rigidObjId, int rotIndex);
+  bool tryDropHeldObj(const Mn::Vector3& dropPos);
+  void waitForRest();
+  void cancelHeldObject();
+  void debugRenderLineLists();
 
   Config config_;
+  bool isHeadless_;
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
   esp::gfx::DebugRender* debugRender_ = nullptr;
@@ -88,9 +108,11 @@ class Arranger {
   Corrade::Containers::Optional<UserAction> activeUserAction_;
   float physicsTimestep_ = 0.f;
   int actionPhysicsStepCounter_ = 0;
+  int restStartPhysicsStepCount_ = 0;
   std::unordered_map<int, bool> linkAnimMemory_;
   int cameraIndex_ = 0;
   float dropOffsetY_ = 0.f;
+  core::Random random_;
 };
 
 }  // namespace arrange

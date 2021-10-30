@@ -66,8 +66,10 @@ Arranger::Arranger(Config&& config,
       simulator_(simulator),
       renderCamera_(renderCamera),
       debugRender_(debugRender),
-      debug3dText_(debug3dText) {
-  updateCamera(0.f, ButtonSet());
+      debug3dText_(debug3dText),
+      random_(0) {
+  isHeadless_ = renderCamera == nullptr;
+  auto camTransformMat = updateCamera(0.f, ButtonSet());
   physicsTimestep_ = simulator_->getMetadataMediator()
                          ->getCurrentPhysicsManagerAttributes()
                          ->getTimestep();
@@ -81,10 +83,9 @@ Arranger::Arranger(Config&& config,
   session_.config = config_;
   // see data/default.physics_config.json timestep
   session_.physicsTimeStep = physicsTimestep_;
-  // set session.defaultCamera from current renderCamera_ transform
+  // set session.defaultCamera from result of updateCamera
   {
-    const auto* node = &renderCamera_->node();
-    const auto absTransformMat = node->absoluteTransformation();
+    const auto& absTransformMat = camTransformMat;
     esp::gfx::replay::Transform absTransform{
         absTransformMat.translation(),
         Magnum::Quaternion::fromMatrix(absTransformMat.rotationShear())};
@@ -105,14 +106,20 @@ Arranger::Arranger(Config&& config,
   activeUserAction_ = UserAction();
   activeUserAction_->isSettlingAction = true;
   activeUserAction_->startFrame = session_.keyframes.size() - 1;
+  waitingForSceneRest_ = true;
+  restStartPhysicsStepCount_ = actionPhysicsStepCounter_;
   LOG(INFO) << "Starting \"settling\" user action on frame "
             << activeUserAction_->startFrame;
+
+  if (isHeadless_) {
+    waitForRest();
+  }
 }
 
-void Arranger::updateCamera(float dt, ButtonSet buttonSet) {
+Mn::Matrix4 Arranger::updateCamera(float dt, ButtonSet buttonSet) {
   if (config_.cameras.empty()) {
     // todo
-    return;
+    return Mn::Matrix4(Mn::Math::IdentityInit);
   }
 
   const int numCameras = config_.cameras.size();
@@ -136,7 +143,11 @@ void Arranger::updateCamera(float dt, ButtonSet buttonSet) {
       Mn::Matrix4::lookAt(adjustedConfigCam.eye, adjustedConfigCam.lookat,
                           Mn::Vector3(0.f, 1.f, 0.f));
 
-  renderCamera_->node().setTransformation(transform);
+  if (renderCamera_) {
+    renderCamera_->node().setTransformation(transform);
+  }
+
+  return transform;
 }
 
 void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
@@ -190,6 +201,7 @@ void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
 
     linkAnimOpt_ = Cr::Containers::NullOpt;
     waitingForSceneRest_ = true;
+    restStartPhysicsStepCount_ = actionPhysicsStepCounter_;
   }
 }
 
@@ -253,74 +265,8 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
                                config_.colors.artObj);
 
       if (buttonSet & Button::Primary) {
-        int numJointPos = artObj->getLinkNumJointPos(linkId);
-        if (numJointPos == 1) {
-          int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
-          const auto pair = artObj->getJointPositionLimits();
-          const auto& lowerLimits = pair.first;
-          const auto& upperLimits = pair.second;
-          if (lowerLimits[jointPosOffset] != INFINITY) {
-            float jointPos = artObj->getJointPositions()[jointPosOffset];
-            float upperLimit = upperLimits[jointPosOffset];
-            float lowerLimit = lowerLimits[jointPosOffset];
-            float animEndPos;
-
-            bool useLowerLimit = false;
-            auto linkMemoryKey =
-                artObjId * 1000 +
-                linkId;  // sloppy hash of object id and link id
-
-            // Decide whether to move to lower limit or upper limit. The logic
-            // here is (1) if the link is near one limit, choose the other
-            // limit, (2) do the opposite of last time we interacted, or (3) if
-            // it's the first interaction, move to the further-away limit. We're
-            // keeping the UX simple and limited to a single "interact" button
-            // (not explicit "open" and "close" buttons). The complexity here is
-            // to handle weird cases where links get stuck/blocked.
-            float distFromUpper = std::abs(jointPos - upperLimit);
-            float distFromLower = std::abs(jointPos - lowerLimit);
-            if (distFromUpper < config_.link.distEps) {
-              useLowerLimit = true;
-            } else if (distFromLower < config_.link.distEps) {
-              useLowerLimit = false;
-            } else if (linkAnimMemory_.count(linkMemoryKey)) {
-              useLowerLimit = !linkAnimMemory_[linkMemoryKey];
-            } else {
-              useLowerLimit = (distFromUpper < distFromLower);
-            }
-
-            animEndPos = useLowerLimit ? lowerLimit : upperLimit;
-            // remember our interaction
-            linkAnimMemory_[linkMemoryKey] = useLowerLimit;
-
-            linkAnimOpt_ = LinkAnimation{.artObjId = artObjId,
-                                         .linkId = linkId,
-                                         .jointPosOffset = jointPosOffset,
-                                         .startPos = jointPos,
-                                         .endPos = animEndPos,
-                                         .animTimer = 0.f};
-            userInputStatus_ = "animating... (F to skip)";
-
-            // start user action for this articulated obj
-            CORRADE_INTERNAL_ASSERT(!activeUserAction_);
-            activeUserAction_ = UserAction();
-            activeUserAction_->articulatedObj =
-                simulator_->getArticulatedObjectManager()->getObjectHandleByID(
-                    artObjId);
-            activeUserAction_->articulatedLink = linkId;
-
-            // duplicate the end frame from the last action
-            session_.keyframes.push_back(session_.keyframes.back());
-            actionPhysicsStepCounter_ = 0;
-
-            activeUserAction_->startFrame = session_.keyframes.size() - 1;
-            LOG(INFO) << "Starting user action " << session_.userActions.size()
-                      << " on frame " << activeUserAction_->startFrame
-                      << " with articulatedObj "
-                      << activeUserAction_->articulatedObj << " link "
-                      << activeUserAction_->articulatedLink;
-          }
-        }
+        startMoveArticulatedLink(artObjId, linkId,
+                                 shouldMoveLinkToLowerLimit(artObjId, linkId));
       }
     }
   }
@@ -332,29 +278,90 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
         CIRCLE_NUM_SEGMENTS, config_.colors.rigidObj);
 
     if (buttonSet & Button::Primary) {
-      heldObjId_ = mouseoverRigidObjId;
-      auto heldObj =
-          simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
-      heldObj->setMotionType(esp::physics::MotionType::KINEMATIC);
-      heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
-      heldObj->setRotation(getRotationByIndex(recentHeldObjRotIndex_));
-
-      // start user action for this rigid obj
-      CORRADE_INTERNAL_ASSERT(!activeUserAction_);
-      activeUserAction_ = UserAction();
-      activeUserAction_->rigidObj =
-          simulator_->getRigidObjectManager()->getObjectHandleByID(heldObjId_);
-
-      // save a start frame that includes the dropped object at it's new pose
-      session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
-      actionPhysicsStepCounter_ = 0;
-
-      activeUserAction_->startFrame = session_.keyframes.size() - 1;
-      LOG(INFO) << "Starting user action " << session_.userActions.size()
-                << " on frame " << activeUserAction_->startFrame
-                << " with rigidObj " << activeUserAction_->rigidObj;
+      startMoveRigidObject(mouseoverRigidObjId, recentHeldObjRotIndex_);
     }
   }
+
+  debugRenderLineLists();
+}
+
+void Arranger::debugRenderLineLists() {
+  const auto color = config_.colors.debugLines;
+  for (const auto& list : config_.debugLineLists) {
+    for (int i = 0; i < list.verts.size() - 1; i++) {
+      debugRender_->drawLine(list.verts[i], list.verts[i + 1], color);
+    }
+  }
+}
+
+bool Arranger::tryDropHeldObj(const Mn::Vector3& dropPos) {
+  bool foundContactFreePos = false;
+
+  CORRADE_INTERNAL_ASSERT(heldObjId_ != -1);
+  auto heldObj = simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+
+  Mn::Vector3 queryPos = dropPos;
+  static float searchStartOffset = -0.05;
+  queryPos.y() -= searchStartOffset;
+
+  // search up from hitPos (using a large step size) to find a collision-free
+  // position. Then, fine-tune by searching down using a small step size.
+  const float maxOffsetY = config_.placementSearchHeight;
+  static float largeOffsetStep = 0.03f;
+  float tmpLastCollisionFreeY = 10000.f;
+  for (float offsetY = 0; offsetY < maxOffsetY; offsetY += largeOffsetStep) {
+    heldObj->setTranslation(queryPos);
+    if (!simulator_->contactTest(heldObjId_)) {
+      float coarseSearchY = queryPos.y();
+
+      static float smallOffsetStep = 0.002f;
+      for (float smallOffsetY = 0.f; smallOffsetY < largeOffsetStep;
+           smallOffsetY += smallOffsetStep) {
+        queryPos.y() -= smallOffsetStep;
+        heldObj->setTranslation(queryPos);
+        if (simulator_->contactTest(heldObjId_)) {
+          queryPos.y() += smallOffsetStep;  // undo the last small offset
+          break;
+        }
+        tmpLastCollisionFreeY = queryPos.y();
+      }
+      // next, add a bit of pad, but don't go above coarseSearchY
+      static float padY = 0.003f;
+      queryPos.y() = std::min(queryPos.y() + padY, coarseSearchY);
+
+      // If dropOffsetY_ > 0, try the requested raised position. If it's
+      // non collision-free, abort.
+      CORRADE_INTERNAL_ASSERT(dropOffsetY_ >= 0.f);
+      if (dropOffsetY_ > 0.f) {
+        queryPos.y() += dropOffsetY_;
+        heldObj->setTranslation(queryPos);
+        if (simulator_->contactTest(heldObjId_)) {
+          break;
+        }
+      }
+
+      foundContactFreePos = true;
+      heldObj->setTranslation(queryPos);
+      break;
+    }
+    queryPos.y() += largeOffsetStep;
+  }
+
+  return foundContactFreePos;
+}
+
+void Arranger::cancelHeldObject() {
+  auto heldObj = simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+  heldObj->setMotionType(esp::physics::MotionType::DYNAMIC);
+  heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
+  heldObjId_ = -1;
+  // pop keyframe at start of this action
+  session_.keyframes.pop_back();
+  activeUserAction_ = Cr::Containers::NullOpt;
+  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
+                                         /*activate*/ false);
+  actionPhysicsStepCounter_ = 0;
+  LOG(INFO) << "Canceling user action " << session_.userActions.size();
 }
 
 void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
@@ -369,16 +376,7 @@ void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
   }
 
   if (buttonSet & Button::Undo) {
-    heldObj->setMotionType(esp::physics::MotionType::DYNAMIC);
-    heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
-    heldObjId_ = -1;
-    // pop keyframe at start of this action
-    session_.keyframes.pop_back();
-    activeUserAction_ = Cr::Containers::NullOpt;
-    simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
-                                           /*activate*/ false);
-    actionPhysicsStepCounter_ = 0;
-    LOG(INFO) << "Canceling user action " << session_.userActions.size();
+    cancelHeldObject();
     return;
   }
 
@@ -407,52 +405,7 @@ void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
     Mn::Vector3 hitPos =
         ray.origin + ray.direction * raycastResults.hits[0].rayDistance;
 
-    Mn::Vector3 queryPos = hitPos;
-    static float searchStartOffset = -0.05;
-    queryPos.y() -= searchStartOffset;
-
-    // search up from hitPos (using a large step size) to find a collision-free
-    // position. Then, fine-tune by searching down using a small step size.
-    const float maxOffsetY = config_.placementSearchHeight;
-    static float largeOffsetStep = 0.03f;
-    float tmpLastCollisionFreeY = 10000.f;
-    for (float offsetY = 0; offsetY < maxOffsetY; offsetY += largeOffsetStep) {
-      heldObj->setTranslation(queryPos);
-      if (!simulator_->contactTest(heldObjId_)) {
-        float coarseSearchY = queryPos.y();
-
-        static float smallOffsetStep = 0.002f;
-        for (float smallOffsetY = 0.f; smallOffsetY < largeOffsetStep;
-             smallOffsetY += smallOffsetStep) {
-          queryPos.y() -= smallOffsetStep;
-          heldObj->setTranslation(queryPos);
-          if (simulator_->contactTest(heldObjId_)) {
-            queryPos.y() += smallOffsetStep;  // undo the last small offset
-            break;
-          }
-          tmpLastCollisionFreeY = queryPos.y();
-        }
-        // next, add a bit of pad, but don't go above coarseSearchY
-        static float padY = 0.003f;
-        queryPos.y() = std::min(queryPos.y() + padY, coarseSearchY);
-
-        // If dropOffsetY_ > 0, try the requested raised position. If it's
-        // non collision-free, abort.
-        CORRADE_INTERNAL_ASSERT(dropOffsetY_ >= 0.f);
-        if (dropOffsetY_ > 0.f) {
-          queryPos.y() += dropOffsetY_;
-          heldObj->setTranslation(queryPos);
-          if (simulator_->contactTest(heldObjId_)) {
-            break;
-          }
-        }
-
-        foundPreviewPos = true;
-        heldObj->setTranslation(queryPos);
-        break;
-      }
-      queryPos.y() += largeOffsetStep;
-    }
+    foundPreviewPos = tryDropHeldObj(hitPos);
 
 #if 0
     if (foundPreviewPos) {
@@ -463,12 +416,12 @@ void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
     }
 #endif
 
-    visualizeHeldObject(hitPos, foundPreviewPos, queryPos);
+    visualizeHeldObject(hitPos, foundPreviewPos);
   }
 
   if (!foundPreviewPos) {
-    // hide held object. move out of sight. This is for visuals, but also to
-    // not screw up the raycast we're about to do.
+    // hide held object because we didn't find a preview position for it. move
+    // out of sight.
     const Mn::Vector3 hiddenPos(0.f, -1000.f, 0.f);
     heldObj->setTranslation(hiddenPos);
   }
@@ -478,12 +431,12 @@ void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
     heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
     heldObjId_ = -1;
     waitingForSceneRest_ = true;
+    restStartPhysicsStepCount_ = actionPhysicsStepCounter_;
   }
 }
 
 void Arranger::visualizeHeldObject(const Mn::Vector3& pickerHitPos,
-                                   bool foundPreviewPos,
-                                   const Mn::Vector3& previewPos) {
+                                   bool foundPreviewPos) {
   auto color = foundPreviewPos ? config_.colors.goodPlacement
                                : config_.colors.badPlacement;
   static float lineLen = 1.f;
@@ -515,7 +468,12 @@ void Arranger::visualizeHeldObject(const Mn::Vector3& pickerHitPos,
 void Arranger::updateWaitingForSceneRest(float dt, ButtonSet buttonSet) {
   CORRADE_INTERNAL_ASSERT(waitingForSceneRest_);
 
-  if (buttonSet & Button::Secondary) {
+  float settleTime = (actionPhysicsStepCounter_ - restStartPhysicsStepCount_) *
+                     physicsTimestep_;
+  bool cancelRest = (buttonSet & Button::Secondary) ||
+                    (settleTime >= config_.physicsMaxSettleTime);
+
+  if (cancelRest) {
     forcePhysicsSceneAsleep(*simulator_);
     waitingForSceneRest_ = false;
     userInputStatus_.clear();
@@ -562,6 +520,7 @@ void Arranger::endUserAction() {
 }
 
 void Arranger::update(float dt, ButtonSet buttonSet) {
+  CORRADE_INTERNAL_ASSERT(!isHeadless_);
   // see src/deps/bullet3/src/BulletDynamics/Dynamics/btRigidBody.cpp
   gDeactivationTime = config_.physicsDeactivationTime;
 
@@ -592,7 +551,7 @@ void Arranger::update(float dt, ButtonSet buttonSet) {
   updateCamera(dt, buttonSet);
 }
 
-int Arranger::getNumRotationIndices() {
+int Arranger::getNumRotationIndices() const {
   return 12;
 }
 
@@ -670,8 +629,10 @@ int Arranger::markAndCountActivePhysicsObjects() {
     auto artObj =
         simulator_->getArticulatedObjectManager()->getObjectByHandle(handle);
     if (artObj->isActive()) {
-      debug3dText_->addText("active", artObj->getTranslation(),
-                            config_.colors.artObj);
+      if (debug3dText_) {
+        debug3dText_->addText("active", artObj->getTranslation(),
+                              config_.colors.artObj);
+      }
       count++;
     }
   }
@@ -681,8 +642,10 @@ int Arranger::markAndCountActivePhysicsObjects() {
     auto rigidObj =
         simulator_->getRigidObjectManager()->getObjectByHandle(handle);
     if (rigidObj->isActive()) {
-      debug3dText_->addText("active", rigidObj->getTranslation(),
-                            config_.colors.rigidObj);
+      if (debug3dText_) {
+        debug3dText_->addText("active", rigidObj->getTranslation(),
+                              config_.colors.rigidObj);
+      }
       count++;
     }
   }
@@ -718,6 +681,202 @@ void Arranger::configureCollisionGroups() {
                   esp::physics::CollisionGroup::Dynamic);
   enableInteracts(PICKER_COLLISION_GROUP,
                   esp::physics::CollisionGroup::Kinematic);
+}
+
+void Arranger::startMoveRigidObject(int rigidObjId, int rotIndex) {
+  CORRADE_INTERNAL_ASSERT(rigidObjId != -1);
+  heldObjId_ = rigidObjId;
+  auto heldObj = simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+  heldObj->setMotionType(esp::physics::MotionType::KINEMATIC);
+  heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
+  heldObj->setRotation(getRotationByIndex(rotIndex));
+
+  // start user action for this rigid obj
+  CORRADE_INTERNAL_ASSERT(!activeUserAction_);
+  activeUserAction_ = UserAction();
+  activeUserAction_->rigidObj =
+      simulator_->getRigidObjectManager()->getObjectHandleByID(heldObjId_);
+
+  // save a start frame that includes the dropped object at it's new pose
+  session_.keyframes.emplace_back(simulator_->savePhysicsKeyframe());
+  actionPhysicsStepCounter_ = 0;
+
+  activeUserAction_->startFrame = session_.keyframes.size() - 1;
+  LOG(INFO) << "Starting user action " << session_.userActions.size()
+            << " on frame " << activeUserAction_->startFrame
+            << " with rigidObj " << activeUserAction_->rigidObj;
+}
+
+bool Arranger::moveArticulatedLink(int artObjId,
+                                   int linkId,
+                                   bool moveToLowerLimit) {
+  if (!startMoveArticulatedLink(artObjId, linkId, moveToLowerLimit)) {
+    return false;
+  }
+
+  do {
+    const auto dt = physicsTimestep_;
+    updateForLinkAnimation(dt, ButtonSet());
+    if (!linkAnimOpt_) {
+      break;
+    }
+    updatePhysicsWorld(dt);
+  } while (true);
+
+  waitForRest();
+  return true;
+}
+
+// for simple one-click interactive usage, use a heuristic to decide open/close
+bool Arranger::shouldMoveLinkToLowerLimit(int artObjId, int linkId) {
+  auto artObj =
+      simulator_->getArticulatedObjectManager()->getObjectByID(artObjId);
+
+  int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
+  const auto pair = artObj->getJointPositionLimits();
+  const auto& lowerLimits = pair.first;
+  const auto& upperLimits = pair.second;
+  if (lowerLimits[jointPosOffset] == INFINITY) {
+    // doesn't matter what we return here because we won't move this link anyway
+    return true;
+  }
+
+  float jointPos = artObj->getJointPositions()[jointPosOffset];
+  float upperLimit = upperLimits[jointPosOffset];
+  float lowerLimit = lowerLimits[jointPosOffset];
+  float animEndPos;
+
+  bool useLowerLimit = false;
+  auto linkMemoryKey =
+      artObjId * 1000 + linkId;  // sloppy hash of object id and link id
+
+  // Decide whether to move to lower limit or upper limit. The logic
+  // here is (1) if the link is near one limit, choose the other
+  // limit, (2) do the opposite of last time we interacted, or (3) if
+  // it's the first interaction, move to the further-away limit. We're
+  // keeping the UX simple and limited to a single "interact" button
+  // (not explicit "open" and "close" buttons). The complexity here is
+  // to handle weird cases where links get stuck/blocked.
+  float distFromUpper = std::abs(jointPos - upperLimit);
+  float distFromLower = std::abs(jointPos - lowerLimit);
+  if (distFromUpper < config_.link.distEps) {
+    useLowerLimit = true;
+  } else if (distFromLower < config_.link.distEps) {
+    useLowerLimit = false;
+  } else if (linkAnimMemory_.count(linkMemoryKey)) {
+    useLowerLimit = !linkAnimMemory_[linkMemoryKey];
+  } else {
+    useLowerLimit = (distFromUpper < distFromLower);
+  }
+
+  // remember our interaction
+  linkAnimMemory_[linkMemoryKey] = useLowerLimit;
+
+  return useLowerLimit;
+}
+
+bool Arranger::startMoveArticulatedLink(int artObjId,
+                                        int linkId,
+                                        bool moveToLowerLimit) {
+  auto artObj =
+      simulator_->getArticulatedObjectManager()->getObjectByID(artObjId);
+
+  int numJointPos = artObj->getLinkNumJointPos(linkId);
+  if (numJointPos != 1) {
+    return false;
+  }
+
+  int jointPosOffset = artObj->getLinkJointPosOffset(linkId);
+  const auto pair = artObj->getJointPositionLimits();
+  const auto& lowerLimits = pair.first;
+  const auto& upperLimits = pair.second;
+  if (lowerLimits[jointPosOffset] == INFINITY) {
+    return false;
+  }
+
+  float jointPos = artObj->getJointPositions()[jointPosOffset];
+  float upperLimit = upperLimits[jointPosOffset];
+  float lowerLimit = lowerLimits[jointPosOffset];
+  float animEndPos;
+
+  bool useLowerLimit = moveToLowerLimit;
+
+  animEndPos = useLowerLimit ? lowerLimit : upperLimit;
+
+  linkAnimOpt_ = LinkAnimation{.artObjId = artObjId,
+                               .linkId = linkId,
+                               .jointPosOffset = jointPosOffset,
+                               .startPos = jointPos,
+                               .endPos = animEndPos,
+                               .animTimer = 0.f};
+  userInputStatus_ = "animating... (F to skip)";
+
+  // start user action for this articulated obj
+  CORRADE_INTERNAL_ASSERT(!activeUserAction_);
+  activeUserAction_ = UserAction();
+  activeUserAction_->articulatedObj =
+      simulator_->getArticulatedObjectManager()->getObjectHandleByID(artObjId);
+  activeUserAction_->articulatedLink = linkId;
+
+  // duplicate the end frame from the last action
+  session_.keyframes.push_back(session_.keyframes.back());
+  actionPhysicsStepCounter_ = 0;
+
+  activeUserAction_->startFrame = session_.keyframes.size() - 1;
+  LOG(INFO) << "Starting user action " << session_.userActions.size()
+            << " on frame " << activeUserAction_->startFrame
+            << " with articulatedObj " << activeUserAction_->articulatedObj
+            << " link " << activeUserAction_->articulatedLink;
+  return true;
+}
+
+bool Arranger::tryMoveRigidObject(int rigidObjId,
+                                  int rotIndex,
+                                  const Mn::Vector3& targetPos,
+                                  float dropOffsetY) {
+  CORRADE_INTERNAL_ASSERT(isHeadless_);
+  CORRADE_INTERNAL_ASSERT(!waitingForSceneRest_);
+
+  startMoveRigidObject(rigidObjId, rotIndex);
+
+  // todo: refactor to not duplicate this move-finish code with
+  // updateForHeldObject
+  {
+    CORRADE_INTERNAL_ASSERT(heldObjId_ != -1);
+    auto heldObj =
+        simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
+
+    dropOffsetY_ = dropOffsetY;
+
+    bool foundContactFreePos = tryDropHeldObj(targetPos);
+    if (foundContactFreePos) {
+      heldObj->setMotionType(esp::physics::MotionType::DYNAMIC);
+      heldObj->overrideCollisionGroup(esp::physics::CollisionGroup::Dynamic);
+      heldObjId_ = -1;
+      waitingForSceneRest_ = true;
+      restStartPhysicsStepCount_ = actionPhysicsStepCounter_;
+    } else {
+      cancelHeldObject();
+      return false;
+    }
+  }
+
+  waitForRest();
+  return true;
+}
+
+void Arranger::waitForRest() {
+  CORRADE_INTERNAL_ASSERT(isHeadless_);
+
+  // todo: enforce max settle time
+  do {
+    const auto dt = physicsTimestep_;
+    updateWaitingForSceneRest(dt, ButtonSet());
+    if (!waitingForSceneRest_) {
+      break;
+    }
+    updatePhysicsWorld(dt);
+  } while (true);
 }
 
 }  // namespace arrange

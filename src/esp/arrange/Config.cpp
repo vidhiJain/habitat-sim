@@ -58,6 +58,7 @@ esp::io::JsonGenericValue toJsonValue(const ConfigColorSet& x,
   esp::io::addMember(obj, "artObj", x.artObj, allocator);
   esp::io::addMember(obj, "rigidObj", x.rigidObj, allocator);
   esp::io::addMember(obj, "placementGuide", x.placementGuide, allocator);
+  esp::io::addMember(obj, "debugLines", x.debugLines, allocator);
   return obj;
 }
 
@@ -67,6 +68,7 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigColorSet& x) {
   esp::io::readMember(obj, "artObj", x.artObj);
   esp::io::readMember(obj, "rigidObj", x.rigidObj);
   esp::io::readMember(obj, "placementGuide", x.placementGuide);
+  esp::io::readMember(obj, "debugLines", x.debugLines);
   return true;
 }
 
@@ -90,24 +92,17 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigCamera& x) {
   return true;
 }
 
-/*
-struct Config {
-  // save a keyframe every n physics steps (see also Arranger::physicsTimestep_)
-  int keyframeSavePeriod = 4;
-  // see Bullet gDeactivationTime
-  float physicsDeactivationTime = 0.75f;
-  // During cursor-based placement, we search up for a collision-free placement
-  float placementSearchHeight = 0.5f;
-  // The mouse picker casts a sphere into the scene to start placement. A
-smaller
-  // radius gives you more control but makes it harder to place on thin objects
-  // like a dishwasher rack.
-  float pickerSphereRadius = 0.015f;
-  ConfigArticulatedLink link;
-  ConfigColorSet colors;
-  std::vector<ConfigCamera> cameras;
-};
-*/
+esp::io::JsonGenericValue toJsonValue(const ConfigLineList& x,
+                                      esp::io::JsonAllocator& allocator) {
+  esp::io::JsonGenericValue obj(rapidjson::kObjectType);
+  esp::io::addMember(obj, "verts", x.verts, allocator);
+  return obj;
+}
+
+bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigLineList& x) {
+  esp::io::readMember(obj, "verts", x.verts);
+  return true;
+}
 
 esp::io::JsonGenericValue toJsonValue(const Config& x,
                                       esp::io::JsonAllocator& allocator) {
@@ -115,6 +110,8 @@ esp::io::JsonGenericValue toJsonValue(const Config& x,
   esp::io::addMember(obj, "keyframeSavePeriod", x.keyframeSavePeriod,
                      allocator);
   esp::io::addMember(obj, "physicsDeactivationTime", x.physicsDeactivationTime,
+                     allocator);
+  esp::io::addMember(obj, "physicsMaxSettleTime", x.physicsMaxSettleTime,
                      allocator);
   esp::io::addMember(obj, "placementSearchHeight", x.placementSearchHeight,
                      allocator);
@@ -130,10 +127,12 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, Config& x) {
   esp::io::readMember(obj, "keyframeSavePeriod", x.keyframeSavePeriod);
   esp::io::readMember(obj, "physicsDeactivationTime",
                       x.physicsDeactivationTime);
+  esp::io::readMember(obj, "physicsMaxSettleTime", x.physicsMaxSettleTime);
   esp::io::readMember(obj, "placementSearchHeight", x.placementSearchHeight);
   esp::io::readMember(obj, "link", x.link);
   esp::io::readMember(obj, "colors", x.colors);
   esp::io::readMember(obj, "cameras", x.cameras);
+  esp::io::readMember(obj, "debugLineLists", x.debugLineLists);
   return true;
 }
 

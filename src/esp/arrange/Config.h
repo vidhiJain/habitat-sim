@@ -31,6 +31,7 @@ struct ConfigColorSet {
   Magnum::Color4 rigidObj = Mn::Color4(1.f, 0.0, 0.f, 1.f);
   // set alpha to 0 to disable placementGuide
   Magnum::Color4 placementGuide = Mn::Color4(0.f, 1.0, 0.f, 0.3f);
+  Magnum::Color4 debugLines = Mn::Color4(1.f, 0.0, 1.f, 0.5f);
 };
 
 struct ConfigCamera {
@@ -38,11 +39,18 @@ struct ConfigCamera {
   Magnum::Vector3 lookat{Magnum::Math::ZeroInit};
 };
 
+struct ConfigLineList {
+  std::vector<Magnum::Vector3> verts;
+};
+
 struct Config {
   // save a keyframe every n physics steps (see also Arranger::physicsTimestep_)
   int keyframeSavePeriod = 4;
   // see Bullet gDeactivationTime
   float physicsDeactivationTime = 0.75f;
+  // In cases where Bullet objects take too long to deactivate, we cancel
+  // the wait for settling and force the action to end.
+  float physicsMaxSettleTime = 4.f;
   // During cursor-based placement, we search up for a collision-free placement
   float placementSearchHeight = 0.5f;
   // The mouse picker casts a sphere into the scene to start placement. A
@@ -52,6 +60,7 @@ struct Config {
   ConfigArticulatedLink link;
   ConfigColorSet colors;
   std::vector<ConfigCamera> cameras;
+  std::vector<ConfigLineList> debugLineLists;
 };
 
 esp::io::JsonGenericValue toJsonValue(const ConfigArticulatedLink& x,
@@ -66,6 +75,10 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigColorSet& x);
 esp::io::JsonGenericValue toJsonValue(const ConfigCamera& x,
                                       esp::io::JsonAllocator& allocator);
 bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigCamera& x);
+
+esp::io::JsonGenericValue toJsonValue(const ConfigLineList& x,
+                                      esp::io::JsonAllocator& allocator);
+bool fromJsonValue(const esp::io::JsonGenericValue& obj, ConfigLineList& x);
 
 esp::io::JsonGenericValue toJsonValue(const Config& x,
                                       esp::io::JsonAllocator& allocator);
