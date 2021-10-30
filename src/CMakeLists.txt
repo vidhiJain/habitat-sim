@@ -186,6 +186,8 @@ if(CORRADE_TARGET_EMSCRIPTEN)
   add_subdirectory(esp/bindings_js)
 endif()
 
+add_subdirectory(utils/batch_arrange)
+
 # Build the following with the build RPath
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 if(BUILD_DATATOOL)
