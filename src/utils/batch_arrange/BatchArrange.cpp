@@ -14,9 +14,13 @@
 namespace Cr = Corrade;
 namespace Mn = Magnum;
 
-esp::logging::LoggingContext loggingContext_;
+esp::logging::LoggingContext loggingContext_("quiet:arrange=verbose");
 
 namespace {
+
+inline esp::logging::Subsystem espLoggingSubsystem() {
+  return esp::logging::Subsystem::arrange;
+}
 
 Mn::Vector3 sampleFromPatch(const std::vector<Mn::Vector3>& patchVerts,
                             esp::core::Random& random) {
@@ -54,7 +58,7 @@ class BatchArrange {
  private:
   void createSimulator();
   void restoreFromScenePhysicsKeyframe();
-  void checkSaveArrangerSession();
+  void saveArrangerSession();
   std::string getActiveSceneSimplifiedName();
   std::string findNewSessionSaveFilepath();
   std::string getActiveScenePhysicsKeyframeFilepath();
@@ -89,8 +93,6 @@ class BatchArrange {
   std::string sceneFileName;
 
   std::unique_ptr<esp::arrange::Arranger> arranger_;
-  std::string sessionSaveFilepath_;
-  int numSavedArrangerUserActions_ = 0;
   esp::core::Random random_;
   esp::arrange::Config arrangeConfig_;
 };
@@ -145,6 +147,8 @@ BatchArrange::BatchArrange(int argc, char** argv) : random_(0) {
           "Path to your scene dataset (your_dataset.scene_dataset_config.json")
       .addOption("arrange-config")
       .setHelp("arrange-config", "filepath to arrange config json file")
+      .addOption("num-sessions", "1")
+      .setHelp("num-sessions", "number of sessions to generate")
       .parse(argc, argv);
 
   sceneFileName = args.value("scene");
@@ -168,9 +172,20 @@ BatchArrange::BatchArrange(int argc, char** argv) : random_(0) {
   arrangeConfig_ = loadArrangeConfig();
   createSimulator();
 
-  generateRandomSession();
-  checkSaveArrangerSession();
+  int numSessions = args_.value<int>("num-sessions");
+  for (int i = 0; i < numSessions; i++) {
+    // For each new session, we undo all previous user actions except the
+    // initial settling action (this action is duplicated across all sessions;
+    // we don't recompute it).
+    const auto& session = arranger_->getSession();
+    constexpr int numSettlingActions = 1;
+    while (arranger_->getSession().userActions.size() > numSettlingActions) {
+      arranger_->undoPreviousUserAction();
+    }
 
+    generateRandomSession();
+    saveArrangerSession();
+  }
 }  // end BatchArrange::BatchArrange
 
 std::string BatchArrange::getActiveScenePhysicsKeyframeFilepath() {
@@ -213,8 +228,6 @@ void BatchArrange::restoreFromScenePhysicsKeyframe() {
   arranger_ = std::make_unique<esp::arrange::Arranger>(
       esp::arrange::Config(arrangeConfig_), simulator_.get(), nullptr, nullptr,
       nullptr);
-  numSavedArrangerUserActions_ = 0;
-  sessionSaveFilepath_ = "";
 }
 
 std::string BatchArrange::getActiveSceneSimplifiedName() {
@@ -239,30 +252,21 @@ std::string BatchArrange::findNewSessionSaveFilepath() {
 }
 
 // todo: only save at end of session
-void BatchArrange::checkSaveArrangerSession() {
+void BatchArrange::saveArrangerSession() {
   const auto& session = arranger_->getSession();
 
-  const auto& filepath = sessionSaveFilepath_;
-
-  // save at the end of every user action
-  if (session.userActions.size() > numSavedArrangerUserActions_) {
-    if (sessionSaveFilepath_.empty()) {
-      sessionSaveFilepath_ = findNewSessionSaveFilepath();
-      if (sessionSaveFilepath_.empty()) {
-        return;
-      }
-    }
-
-    rapidjson::Document d(rapidjson::kObjectType);
-    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
-    esp::io::addMember(d, "session", session, allocator);
-    // avoid pretty writer, to reduce filesize
-    esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ false,
-                             /*maxDecimalPlaces*/ 7);
-    ESP_DEBUG() << "Session saved to " << filepath;
-
-    numSavedArrangerUserActions_ = session.userActions.size();
+  const auto filepath = findNewSessionSaveFilepath();
+  if (filepath.empty()) {
+    return;
   }
+
+  rapidjson::Document d(rapidjson::kObjectType);
+  rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+  esp::io::addMember(d, "session", session, allocator);
+  // avoid pretty writer, to reduce filesize
+  esp::io::writeJsonToFile(d, filepath, /*usePrettyWriter*/ false,
+                           /*maxDecimalPlaces*/ 7);
+  ESP_DEBUG() << "Session saved to " << filepath;
 }
 
 esp::arrange::Config BatchArrange::loadArrangeConfig() {
@@ -313,33 +317,39 @@ Mn::Vector3 BatchArrange::getRandomDropPositionForRack(bool isUpperRack) {
 }
 
 void BatchArrange::generateRandomSession() {
+  // some constants used later
+  constexpr float maxDropOffsetY = 0.25;
+  constexpr int minObjectsUpperRack = 1;
+  constexpr int maxObjectsUpperRack = 5;
+  constexpr int minObjectsLowerRack = 1;
+  constexpr int maxObjectsLowerRack = 8;
+
   const auto& artObjMgr = simulator_->getArticulatedObjectManager();
   // See your scene_instance.json file for the articulated object name, and note
   // our convention to append the instance index. The first instance is :0000.
   // This string is also discoverable using the interactive arrange recorder
   // (it is printed to the terminal during mouse-click interaction).
   int artObjId = artObjMgr->getObjectIDByHandle("ktc_dishwasher_:0000");
-  CORRADE_INTERNAL_ASSERT(artObjId != esp::ID_UNDEFINED);
+  ESP_CHECK(artObjId != esp::ID_UNDEFINED, "ktc_dishwasher_:0000 not found");
 
   // dishwasher has 4 links (unused, lower rack, door, upper rack)
   constexpr int lowerRackLinkId = 1;
   constexpr int doorLinkId = 2;
   constexpr int upperRackLinkId = 3;
-  bool success = false;
-  success = arranger_->moveArticulatedLink(artObjId, doorLinkId,
-                                           /*moveToLowerLimit*/ true);  // open
-  ESP_CHECK(success, "moveArticulatedLink failed");
+  arranger_->moveArticulatedLink(artObjId, doorLinkId,
+                                 /*moveToLowerLimit*/ true);  // open
 
   bool loadUpperRackFirst = random_.uniform_int(0, 2) == 1;
 
-  success = arranger_->moveArticulatedLink(
+  arranger_->moveArticulatedLink(
       artObjId, loadUpperRackFirst ? upperRackLinkId : lowerRackLinkId,
       /*moveToLowerLimit*/ false);  // open
-  ESP_CHECK(success, "moveArticulatedLink failed");
   bool isUpperRackOpen = loadUpperRackFirst;
 
-  int numObjectsUpperRack = random_.uniform_int(3, 6);
-  int numObjectsLowerRack = random_.uniform_int(5, 8);
+  int numObjectsUpperRack =
+      random_.uniform_int(minObjectsUpperRack, maxObjectsUpperRack);
+  int numObjectsLowerRack =
+      random_.uniform_int(minObjectsLowerRack, maxObjectsLowerRack);
 
   const auto& rigidObjMgr = simulator_->getRigidObjectManager();
   auto rigidObjHandles = rigidObjMgr->getObjectHandlesBySubstring(
@@ -353,8 +363,8 @@ void BatchArrange::generateRandomSession() {
       filteredRigidObjIDs.push_back(rigidObjId);
     }
   }
-  CORRADE_INTERNAL_ASSERT(
-      filteredRigidObjIDs.size());  // todo: abort action here
+  ESP_CHECK(filteredRigidObjIDs.size(),
+            "No dynamic rigid objects found to move");
 
   int maxMoveAttempts = 100;
   int numSuccessfulMoves = 0;
@@ -364,7 +374,7 @@ void BatchArrange::generateRandomSession() {
     int selectedRigidObjId = filteredRigidObjIDs[randIndex];
 
     // todo: hook maxDropOffsetY up to config
-    const float dropOffsetY = random_.uniform_float(0.f, 0.5f);
+    const float dropOffsetY = random_.uniform_float(0.f, maxDropOffsetY);
 
     const Mn::Vector3 dropPos = getRandomDropPositionForRack(isUpperRackOpen);
 
@@ -385,15 +395,13 @@ void BatchArrange::generateRandomSession() {
       if ((loadUpperRackFirst && numSuccessfulMoves == numObjectsUpperRack) ||
           (!loadUpperRackFirst && numSuccessfulMoves == numObjectsLowerRack)) {
         // close first rack
-        success = arranger_->moveArticulatedLink(
+        arranger_->moveArticulatedLink(
             artObjId, loadUpperRackFirst ? upperRackLinkId : lowerRackLinkId,
             /*moveToLowerLimit*/ true);  // close
-        ESP_CHECK(success, "moveArticulatedLink failed");
         // open second rack
-        success = arranger_->moveArticulatedLink(
+        arranger_->moveArticulatedLink(
             artObjId, loadUpperRackFirst ? lowerRackLinkId : upperRackLinkId,
             /*moveToLowerLimit*/ false);  // open
-        ESP_CHECK(success, "moveArticulatedLink failed");
 
         isUpperRackOpen = !isUpperRackOpen;
       }
@@ -405,15 +413,19 @@ void BatchArrange::generateRandomSession() {
     }
   }
 
+  if (numSuccessfulMoves == 0) {
+    ESP_ERROR()
+        << "arranger_->tryMoveRigidObject never succeeded. In general, this "
+           "function fails because a collision-free placement can't be found.";
+  }
+
   // close whatever rack is open
-  success = arranger_->moveArticulatedLink(
+  arranger_->moveArticulatedLink(
       artObjId, isUpperRackOpen ? upperRackLinkId : lowerRackLinkId,
       /*moveToLowerLimit*/ true);  // close
-  ESP_CHECK(success, "moveArticulatedLink failed");
 
-  success = arranger_->moveArticulatedLink(
-      artObjId, doorLinkId, /*moveToLowerLimit*/ false);  // close
-  ESP_CHECK(success, "moveArticulatedLink failed");
+  arranger_->moveArticulatedLink(artObjId, doorLinkId,
+                                 /*moveToLowerLimit*/ false);  // close
 }
 
 }  // namespace
