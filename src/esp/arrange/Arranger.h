@@ -9,7 +9,7 @@
 
 #include "esp/core/Random.h"
 #include "esp/gfx/Debug3DText.h"
-#include "esp/gfx/DebugRender.h"
+#include "esp/gfx/DebugLineRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/sim/Simulator.h"
 
@@ -33,12 +33,12 @@ class Arranger {
 
   typedef Corrade::Containers::EnumSet<Button> ButtonSet;
 
-  // for headless usage, pass nullptr for renderCamera, debugRender, and
+  // for headless usage, pass nullptr for renderCamera, debugLineRender, and
   // debug3dText
   Arranger(Config&& config,
            esp::sim::Simulator* simulator,
            esp::gfx::RenderCamera* renderCamera,
-           esp::gfx::DebugRender* debugRender,
+           esp::gfx::DebugLineRender* debugLineRender,
            esp::gfx::Debug3DText* debug3dText);
 
   void setCursor(const Magnum::Vector2i& cursor) { cursor_ = cursor; }
@@ -54,9 +54,10 @@ class Arranger {
   // headless API
   bool tryMoveRigidObject(int rigidObjId,
                           int rotIndex,
-                          const Mn::Vector3& targetPos,
+                          const Magnum::Vector3& targetPos,
                           float dropOffsetY);
-  bool moveArticulatedLink(int artObjId, int linkId, bool moveToLowerLimit);
+  void moveArticulatedLink(int artObjId, int linkId, bool moveToLowerLimit);
+  void undoPreviousUserAction();
 
   int getNumRotationIndices() const;
 
@@ -89,13 +90,13 @@ class Arranger {
   bool tryDropHeldObj(const Mn::Vector3& dropPos);
   void waitForRest();
   void cancelHeldObject();
-  void debugRenderLineLists();
+  void debugLineRenderLineLists();
 
   Config config_;
   bool isHeadless_;
   esp::sim::Simulator* simulator_ = nullptr;
   esp::gfx::RenderCamera* renderCamera_ = nullptr;
-  esp::gfx::DebugRender* debugRender_ = nullptr;
+  esp::gfx::DebugLineRender* debugLineRender_ = nullptr;
   esp::gfx::Debug3DText* debug3dText_ = nullptr;
   Magnum::Vector2i cursor_;
   int heldObjId_ = -1;

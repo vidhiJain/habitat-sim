@@ -60,12 +60,12 @@ void forcePhysicsSceneAsleep(esp::sim::Simulator& simulator) {
 Arranger::Arranger(Config&& config,
                    esp::sim::Simulator* simulator,
                    esp::gfx::RenderCamera* renderCamera,
-                   esp::gfx::DebugRender* debugRender,
+                   esp::gfx::DebugLineRender* debugLineRender,
                    esp::gfx::Debug3DText* debug3dText)
     : config_(std::move(config)),
       simulator_(simulator),
       renderCamera_(renderCamera),
-      debugRender_(debugRender),
+      debugLineRender_(debugLineRender),
       debug3dText_(debug3dText),
       random_(0) {
   isHeadless_ = renderCamera == nullptr;
@@ -205,31 +205,33 @@ void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
   }
 }
 
+void Arranger::undoPreviousUserAction() {
+  ESP_CHECK(session_.userActions.size() > 1, "no previous user action to undo");
+  session_.userActions.pop_back();
+  const int firstKeyframeToDelete = session_.userActions.back().endFrame + 1;
+  session_.keyframes.erase(session_.keyframes.begin() + firstKeyframeToDelete,
+                           session_.keyframes.end());
+
+  // rewind to recent physics keyframe; this will put the physics sim into
+  // a more consistent state, e.g. zero velocities
+  simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
+                                         /*activate*/ false);
+  actionPhysicsStepCounter_ = 0;
+
+  // stepping here allows bodies that want to go to sleep to actually go to
+  // sleep
+  simulator_->stepWorld(-1);
+
+  ESP_DEBUG() << "Undoing user action " << session_.userActions.size()
+              << " and restoring to keyframe " << session_.keyframes.size() - 1;
+}
+
 void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
   CORRADE_INTERNAL_ASSERT(heldObjId_ == -1 && !linkAnimOpt_);
 
   if (buttonSet & Button::Undo) {
     if (session_.userActions.size() > 1) {
-      session_.userActions.pop_back();
-      const int firstKeyframeToDelete =
-          session_.userActions.back().endFrame + 1;
-      session_.keyframes.erase(
-          session_.keyframes.begin() + firstKeyframeToDelete,
-          session_.keyframes.end());
-
-      // rewind to recent physics keyframe; this will put the physics sim into
-      // a more consistent state, e.g. zero velocities
-      simulator_->restoreFromPhysicsKeyframe(session_.keyframes.back(),
-                                             /*activate*/ false);
-      actionPhysicsStepCounter_ = 0;
-
-      // stepping here allows bodies that want to go to sleep to actually go to
-      // sleep
-      simulator_->stepWorld(-1);
-
-      ESP_DEBUG() << "Undoing user action " << session_.userActions.size()
-                  << " and restoring to keyframe "
-                  << session_.keyframes.size() - 1;
+      undoPreviousUserAction();
     }
   }
 
@@ -260,9 +262,9 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
       const auto* link = artObj->getLink(linkId);
 
       // todo: change to axes
-      debugRender_->drawCircle(link->getTranslation(), Mn::Vector3(0, 1, 0),
-                               0.3f, CIRCLE_NUM_SEGMENTS,
-                               config_.colors.artObj);
+      debugLineRender_->drawCircle(link->getTranslation(), 0.3f,
+                                   config_.colors.artObj, CIRCLE_NUM_SEGMENTS,
+                                   Mn::Vector3(0, 1, 0));
 
       if (buttonSet & Button::Primary) {
         startMoveArticulatedLink(artObjId, linkId,
@@ -272,24 +274,24 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
   }
 
   if (mouseoverRigidObjId != -1) {
-    debugRender_->drawCircle(
-        simulator_->getTranslation(mouseoverRigidObjId), Mn::Vector3(0, 1, 0),
+    debugLineRender_->drawCircle(
+        simulator_->getTranslation(mouseoverRigidObjId),
         getDisplayRadiusForObject(*simulator_, mouseoverRigidObjId) * 1.5,
-        CIRCLE_NUM_SEGMENTS, config_.colors.rigidObj);
+        config_.colors.rigidObj, CIRCLE_NUM_SEGMENTS, Mn::Vector3(0, 1, 0));
 
     if (buttonSet & Button::Primary) {
       startMoveRigidObject(mouseoverRigidObjId, recentHeldObjRotIndex_);
     }
   }
 
-  debugRenderLineLists();
+  debugLineRenderLineLists();
 }
 
-void Arranger::debugRenderLineLists() {
+void Arranger::debugLineRenderLineLists() {
   const auto color = config_.colors.debugLines;
   for (const auto& list : config_.debugLineLists) {
     for (int i = 0; i < list.verts.size() - 1; i++) {
-      debugRender_->drawLine(list.verts[i], list.verts[i + 1], color);
+      debugLineRender_->drawLine(list.verts[i], list.verts[i + 1], color);
     }
   }
 }
@@ -409,10 +411,10 @@ void Arranger::updateForHeldObject(float dt, ButtonSet buttonSet) {
 
 #if 0
     if (foundPreviewPos) {
-      debugRender_->drawCircle(
-          queryPos, Mn::Vector3(0, 1, 0),
-          getDisplayRadiusForObject(*simulator_, heldObjId_) * 1.5, CIRCLE_NUM_SEGMENTS,
-          Mn::Color4::green());
+      debugLineRender_->drawCircle(
+          queryPos,
+          getDisplayRadiusForObject(*simulator_, heldObjId_) * 1.5,
+          Mn::Color4::green(), CIRCLE_NUM_SEGMENTS, Mn::Vector3(0, 1, 0));
     }
 #endif
 
@@ -440,28 +442,28 @@ void Arranger::visualizeHeldObject(const Mn::Vector3& pickerHitPos,
   auto color = foundPreviewPos ? config_.colors.goodPlacement
                                : config_.colors.badPlacement;
   static float lineLen = 1.f;
-  debugRender_->drawLine(pickerHitPos,
-                         pickerHitPos - Mn::Vector3(0.f, lineLen, 0.f), color);
+  debugLineRender_->drawLine(
+      pickerHitPos, pickerHitPos - Mn::Vector3(0.f, lineLen, 0.f), color);
 
   if (foundPreviewPos && config_.colors.placementGuide.a() > 0) {
     auto heldObj =
         simulator_->getRigidObjectManager()->getObjectByID(heldObjId_);
-    debugRender_->pushInputTransform(heldObj->getTransformation());
+    debugLineRender_->pushTransform(heldObj->getTransformation());
 
     static float scale = 0.003f;
     static float fudge = 0.08f;
     int dim = std::min(
         120, int((getDisplayRadiusForObject(*simulator_, heldObjId_) + fudge) /
                  scale));
-    debugRender_->pushInputTransform(
+    debugLineRender_->pushTransform(
         Mn::Matrix4::scaling(Mn::Vector3(scale, scale, scale)));
     for (int row = -dim; row <= dim; row++) {
-      debugRender_->drawTransformedLine(Mn::Vector3(-dim, 0.f, row),
-                                        Mn::Vector3(dim, 0.f, row),
-                                        config_.colors.placementGuide);
+      debugLineRender_->drawTransformedLine(Mn::Vector3(-dim, 0.f, row),
+                                            Mn::Vector3(dim, 0.f, row),
+                                            config_.colors.placementGuide);
     }
-    debugRender_->popInputTransform();
-    debugRender_->popInputTransform();
+    debugLineRender_->popTransform();
+    debugLineRender_->popTransform();
   }
 }
 
@@ -708,12 +710,11 @@ void Arranger::startMoveRigidObject(int rigidObjId, int rotIndex) {
               << activeUserAction_->rigidObj;
 }
 
-bool Arranger::moveArticulatedLink(int artObjId,
+void Arranger::moveArticulatedLink(int artObjId,
                                    int linkId,
                                    bool moveToLowerLimit) {
-  if (!startMoveArticulatedLink(artObjId, linkId, moveToLowerLimit)) {
-    return false;
-  }
+  auto ok = startMoveArticulatedLink(artObjId, linkId, moveToLowerLimit);
+  ESP_CHECK(ok, "startMoveArticulatedLink failed for linkId " << linkId);
 
   do {
     const auto dt = physicsTimestep_;
@@ -725,7 +726,6 @@ bool Arranger::moveArticulatedLink(int artObjId,
   } while (true);
 
   waitForRest();
-  return true;
 }
 
 // for simple one-click interactive usage, use a heuristic to decide open/close

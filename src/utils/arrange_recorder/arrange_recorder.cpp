@@ -21,7 +21,7 @@
 
 #include "esp/arrange/Arranger.h"
 #include "esp/core/Esp.h"
-#include "esp/gfx/DebugRender.h"
+#include "esp/gfx/DebugLineRender.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/scene/SceneNode.h"
@@ -148,7 +148,6 @@ class ArrangeRecorder : public Mn::Platform::Application {
 
   Mn::ImGuiIntegration::Context imgui_{Mn::NoCreate};
 
-  esp::gfx::DebugRender debugRender_;
   esp::gfx::Debug3DText debug3dText_;
   std::unique_ptr<esp::arrange::Arranger> arranger_;
   std::string sessionSaveFilepath_;
@@ -265,8 +264,8 @@ void ArrangeRecorder::createSimulator() {
       Mn::Quaternion({-0.271441, 0, 0}, 0.962455));
 
   arranger_ = std::make_unique<esp::arrange::Arranger>(
-      loadArrangeConfig(), simulator_.get(), renderCamera_, &debugRender_,
-      &debug3dText_);
+      loadArrangeConfig(), simulator_.get(), renderCamera_,
+      simulator_->getDebugLineRender().get(), &debug3dText_);
 
   restoreFromScenePhysicsKeyframe();
 }
@@ -403,13 +402,6 @@ void ArrangeRecorder::drawEvent() {
     Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
     Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
     Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
-
-    {
-      Mn::Matrix4 camM(renderCamera_->cameraMatrix());
-      Mn::Matrix4 projM(renderCamera_->projectionMatrix());
-      debugRender_.setTransformationProjectionMatrix(projM * camM);
-      debugRender_.flushLines();
-    }
 
     esp::gfx::RenderTarget* sensorRenderTarget =
         simulator_->getRenderTarget(defaultAgentId_, "rgba_camera");
@@ -702,8 +694,8 @@ void ArrangeRecorder::restoreFromScenePhysicsKeyframe() {
 
   arranger_.reset();
   arranger_ = std::make_unique<esp::arrange::Arranger>(
-      loadArrangeConfig(), simulator_.get(), renderCamera_, &debugRender_,
-      &debug3dText_);
+      loadArrangeConfig(), simulator_.get(), renderCamera_,
+      simulator_->getDebugLineRender().get(), &debug3dText_);
   numSavedArrangerUserActions_ = 0;
   sessionSaveFilepath_ = "";
 }
