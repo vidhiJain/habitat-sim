@@ -1160,7 +1160,9 @@ agent::Agent::ptr Simulator::addAgent(
   esp::sensor::SensorFactory::createSensors(agentNode,
                                             agentConfig.sensorSpecifications);
   agent::AgentState state;
-  sampleRandomAgentState(state);
+  if (pathfinder_->isLoaded()) {
+    sampleRandomAgentState(state);
+  }
   ag->setInitialState(state);
 
   // Add a RenderTarget to each of the agent's visual sensors
