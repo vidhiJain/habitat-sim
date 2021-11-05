@@ -270,7 +270,6 @@ void ArrangeRecorder::createSimulator() {
   restoreFromScenePhysicsKeyframe();
 }
 
-// todo: remove all these args
 ArrangeRecorder::ArrangeRecorder(const Arguments& arguments)
     : Mn::Platform::Application{
           arguments,

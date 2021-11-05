@@ -118,7 +118,6 @@ Arranger::Arranger(Config&& config,
 
 Mn::Matrix4 Arranger::updateCamera(float dt, ButtonSet buttonSet) {
   if (config_.cameras.empty()) {
-    // todo
     return Mn::Matrix4(Mn::Math::IdentityInit);
   }
 
@@ -261,7 +260,6 @@ void Arranger::updateIdle(float dt, ButtonSet buttonSet) {
 
       const auto* link = artObj->getLink(linkId);
 
-      // todo: change to axes
       debugLineRender_->drawCircle(link->getTranslation(), 0.3f,
                                    config_.colors.artObj, CIRCLE_NUM_SEGMENTS,
                                    Mn::Vector3(0, 1, 0));
@@ -869,7 +867,6 @@ bool Arranger::tryMoveRigidObject(int rigidObjId,
 void Arranger::waitForRest() {
   CORRADE_INTERNAL_ASSERT(isHeadless_);
 
-  // todo: enforce max settle time
   do {
     const auto dt = physicsTimestep_;
     updateWaitingForSceneRest(dt, ButtonSet());
