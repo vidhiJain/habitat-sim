@@ -190,8 +190,7 @@ void Arranger::updateForLinkAnimation(float dt, ButtonSet buttonSet) {
   jointVels[linkAnim.jointPosOffset] = vel;
   artObj->setJointVelocities(jointVels);
 
-  constexpr float animMaxDuration = 12.f;
-  if (isNearEndPos || linkAnim.animTimer > animMaxDuration ||
+  if (isNearEndPos || linkAnim.animTimer > config_.linkAnimationMaxDuration ||
       buttonSet & Button::Secondary) {
     if (isNearEndPos) {
       // animation is finished so snap to end pos

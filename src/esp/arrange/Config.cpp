@@ -113,6 +113,8 @@ esp::io::JsonGenericValue toJsonValue(const Config& x,
                      allocator);
   esp::io::addMember(obj, "physicsMaxSettleTime", x.physicsMaxSettleTime,
                      allocator);
+  esp::io::addMember(obj, "linkAnimationMaxDuration",
+                     x.linkAnimationMaxDuration, allocator);
   esp::io::addMember(obj, "placementSearchHeight", x.placementSearchHeight,
                      allocator);
   esp::io::addMember(obj, "pickerSphereRadius", x.pickerSphereRadius,
@@ -128,6 +130,8 @@ bool fromJsonValue(const esp::io::JsonGenericValue& obj, Config& x) {
   esp::io::readMember(obj, "physicsDeactivationTime",
                       x.physicsDeactivationTime);
   esp::io::readMember(obj, "physicsMaxSettleTime", x.physicsMaxSettleTime);
+  esp::io::readMember(obj, "linkAnimationMaxDuration",
+                      x.linkAnimationMaxDuration);
   esp::io::readMember(obj, "placementSearchHeight", x.placementSearchHeight);
   esp::io::readMember(obj, "link", x.link);
   esp::io::readMember(obj, "colors", x.colors);

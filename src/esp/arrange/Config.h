@@ -51,6 +51,10 @@ struct Config {
   // In cases where Bullet objects take too long to deactivate, we cancel
   // the wait for settling and force the action to end.
   float physicsMaxSettleTime = 4.f;
+  // In cases where the link animation takes too long to complete (e.g. an
+  // object is blocking and preventing closing a door), we cancel the link
+  // animation (e.g. leave the door half-closed).
+  float linkAnimationMaxDuration = 12.f;
   // During cursor-based placement, we search up for a collision-free placement
   float placementSearchHeight = 0.5f;
   // The mouse picker casts a sphere into the scene to start placement. A
