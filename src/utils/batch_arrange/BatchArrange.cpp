@@ -134,7 +134,6 @@ void BatchArrange::createSimulator() {
   restoreFromScenePhysicsKeyframe();
 }
 
-// todo: remove all these args
 BatchArrange::BatchArrange(int argc, char** argv) : random_(0) {
   Cr::Utility::Arguments args;
   args.addNamedArgument("scene")
@@ -149,7 +148,11 @@ BatchArrange::BatchArrange(int argc, char** argv) : random_(0) {
       .setHelp("arrange-config", "filepath to arrange config json file")
       .addOption("num-sessions", "1")
       .setHelp("num-sessions", "number of sessions to generate")
+      .addOption("random-seed", "0")
+      .setHelp("random-seed", "affects how sessions are randomly generated")
       .parse(argc, argv);
+
+  random_.seed(args.value<int>("random-seed"));
 
   sceneFileName = args.value("scene");
 
@@ -251,7 +254,6 @@ std::string BatchArrange::findNewSessionSaveFilepath() {
   return sessionsDir + "/" + sessionName;
 }
 
-// todo: only save at end of session
 void BatchArrange::saveArrangerSession() {
   const auto& session = arranger_->getSession();
 
@@ -373,13 +375,11 @@ void BatchArrange::generateRandomSession() {
     int randIndex = random_.uniform_int(0, filteredRigidObjIDs.size());
     int selectedRigidObjId = filteredRigidObjIDs[randIndex];
 
-    // todo: hook maxDropOffsetY up to config
     const float dropOffsetY = random_.uniform_float(0.f, maxDropOffsetY);
 
     const Mn::Vector3 dropPos = getRandomDropPositionForRack(isUpperRackOpen);
 
     // pick a random rotation from our fixed set
-    // todo: generate a random rotation quaternion instead?
     auto rotIndex = random_.uniform_int(0, arranger_->getNumRotationIndices());
 
     if (arranger_->tryMoveRigidObject(selectedRigidObjId, rotIndex, dropPos,
